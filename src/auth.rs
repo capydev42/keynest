@@ -1,13 +1,14 @@
 use anyhow::{Result, bail};
 use std::io::{self, Read};
+use zeroize::Zeroizing;
 
-pub fn read_password() -> Result<String> {
+pub fn read_password() -> Result<Zeroizing<String>> {
     //  Environment Variable
     //  KEYNEST_PASSWORD="supersecret" keynest get github_token
     if let Ok(pw) = std::env::var("KEYNEST_PASSWORD")
         && !pw.is_empty()
     {
-        return Ok(pw);
+        return Ok(Zeroizing::new(pw));
     }
 
     //  stdin (Pipeline)
@@ -19,7 +20,7 @@ pub fn read_password() -> Result<String> {
         let pw = buf.trim_end().to_string();
 
         if !pw.is_empty() {
-            return Ok(pw);
+            return Ok(Zeroizing::new(pw));
         }
     }
 
@@ -27,7 +28,7 @@ pub fn read_password() -> Result<String> {
     if atty::is(atty::Stream::Stdin) {
         let pw = rpassword::prompt_password("Password: ")?;
         if !pw.is_empty() {
-            return Ok(pw);
+            return Ok(Zeroizing::new(pw));
         }
     }
 

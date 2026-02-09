@@ -5,10 +5,13 @@ use chacha20poly1305::{
     aead::{Aead, KeyInit},
 };
 use getrandom::fill;
+use zeroize::Zeroizing;
 
 pub const SALT_LEN: usize = 16;
 pub const NONCE_LEN: usize = 24;
 pub const KEY_LEN: usize = 32;
+pub const VER_LEN: usize = 1;
+pub const MAGIC_LEN: usize = 4;
 
 /// Fill buffer with cryptographically secure random bytes
 fn secure_random(buf: &mut [u8]) -> Result<()> {
@@ -48,10 +51,27 @@ pub fn encrypt(key: &[u8], plaintext: &[u8]) -> Result<(Vec<u8>, [u8; NONCE_LEN]
 }
 
 /// Decrypt ciphertext
-pub fn decrypt(key: &[u8], nonce: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>> {
+pub fn decrypt(key: &[u8], nonce: &[u8], ciphertext: &[u8]) -> Result<Zeroizing<Vec<u8>>> {
     let cipher = XChaCha20Poly1305::new(Key::from_slice(key));
 
-    cipher
+    let plaintext = cipher
         .decrypt(XNonce::from_slice(nonce), ciphertext)
-        .map_err(|_| anyhow!("Invalid password or corrupted data"))
+        .map_err(|_| anyhow!("Invalid password or corrupted data"))?;
+    Ok(Zeroizing::new(plaintext))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn encrypt_decrypt_zeroizing_roundtrip() {
+        let key = derive_key("pw", &generate_salt().unwrap()).unwrap();
+        let data = b"{\"ok\":true}".to_vec();
+
+        let (ciphertext, nonce) = encrypt(&key, &data).expect("encrypt failed");
+
+        let plaintext = decrypt(&key, &nonce, &ciphertext).expect("decrypt failed");
+        assert_eq!(&*plaintext, &data);
+    }
 }

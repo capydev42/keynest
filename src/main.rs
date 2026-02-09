@@ -48,38 +48,40 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Cli::parse();
     let password = auth::read_password()?;
     match args.command {
-        Commands::Init => match Keynest::init(&password) {
+        Commands::Init => match Keynest::init(password) {
             Ok(_) => println!("Keystore initialized"),
             Err(e) => panic!("Keystore initialization failed: {e}"),
         },
         Commands::Set { key, value } => {
-            let mut kn = Keynest::open(&password)?;
+            let mut kn = Keynest::open(password)?;
             kn.set(&key, &value)?;
             kn.save()?;
             println!("Stored secret '{key}'");
         }
         Commands::Update { key, new_value } => {
-            let mut kn = Keynest::open(&password)?;
+            let mut kn = Keynest::open(password)?;
             kn.update(&key, &new_value)?;
             kn.save()?;
             println!("Secret '{key}' updated.");
         }
         Commands::Get { key } => {
-            let kn = Keynest::open(&password)?;
+            let kn = Keynest::open(password)?;
             match kn.get(&key) {
                 Some(secret) => println!("{secret}"),
                 None => println!("Key not found"),
             }
         }
         Commands::List { all } => {
-            let kn = Keynest::open(&password)?;
+            let kn = Keynest::open(password)?;
             if all {
                 println!("Name: \t\t\t Value: \t\t\t Updated:");
 
                 for secret_entry in kn.list_all() {
                     println!(
                         "{}\t\t\t {} \t\t\t {}",
-                        secret_entry.key, secret_entry.value, secret_entry.updated
+                        secret_entry.key(),
+                        secret_entry.value(),
+                        secret_entry.updated()
                     );
                 }
             } else {
@@ -90,7 +92,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Commands::Remove { key } => {
-            let mut kn = Keynest::open(&password)?;
+            let mut kn = Keynest::open(password)?;
             kn.remove(&key)?;
             match kn.save() {
                 Ok(_) => println!("Key : '{key}' removed sucessfully"),
