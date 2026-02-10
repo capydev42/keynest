@@ -1,17 +1,11 @@
+use super::{NONCE_LEN, SALT_LEN};
 use anyhow::{Result, anyhow};
-use argon2::Argon2;
 use chacha20poly1305::{
     Key, XChaCha20Poly1305, XNonce,
     aead::{Aead, KeyInit},
 };
 use getrandom::fill;
 use zeroize::Zeroizing;
-
-pub const SALT_LEN: usize = 16;
-pub const NONCE_LEN: usize = 24;
-pub const KEY_LEN: usize = 32;
-pub const VER_LEN: usize = 1;
-pub const MAGIC_LEN: usize = 4;
 
 /// Fill buffer with cryptographically secure random bytes
 fn secure_random(buf: &mut [u8]) -> Result<()> {
@@ -23,17 +17,6 @@ pub fn generate_salt() -> Result<[u8; SALT_LEN]> {
     let mut salt = [0u8; SALT_LEN];
     secure_random(&mut salt)?;
     Ok(salt)
-}
-
-/// Derive encryption key from password
-pub fn derive_key(password: &str, salt: &[u8]) -> Result<[u8; KEY_LEN]> {
-    let mut key = [0u8; KEY_LEN];
-
-    Argon2::default()
-        .hash_password_into(password.as_bytes(), salt, &mut key)
-        .map_err(|_| anyhow!("key derivation failed"))?;
-
-    Ok(key)
 }
 
 /// Encrypt plaintext
@@ -58,20 +41,4 @@ pub fn decrypt(key: &[u8], nonce: &[u8], ciphertext: &[u8]) -> Result<Zeroizing<
         .decrypt(XNonce::from_slice(nonce), ciphertext)
         .map_err(|_| anyhow!("Invalid password or corrupted data"))?;
     Ok(Zeroizing::new(plaintext))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn encrypt_decrypt_zeroizing_roundtrip() {
-        let key = derive_key("pw", &generate_salt().unwrap()).unwrap();
-        let data = b"{\"ok\":true}".to_vec();
-
-        let (ciphertext, nonce) = encrypt(&key, &data).expect("encrypt failed");
-
-        let plaintext = decrypt(&key, &nonce, &ciphertext).expect("decrypt failed");
-        assert_eq!(&*plaintext, &data);
-    }
 }

@@ -179,12 +179,10 @@ Notes:
 ### Security & TODOs (MVP caveats)
 
 - This is an MVP. Before production use:
-  1. Review Argon2/crypto parameters and KDF configuration.
-  2. Remove or replace any `panic!`/`unwrap()` in library code with proper `Result` handling.
-  3. Add stronger error handling and avoid leaking secret material in logs.
-  4. Add CI: `cargo fmt`, `cargo clippy`, tests.
-  5. Add integration/end-to-end tests and an audit of cryptographic primitives.
+  1. Add CLI options for custom argon2 parameters
+  2. Add CI: `cargo fmt`, `cargo clippy`, tests.
+  3. Add integration/end-to-end tests and an audit of cryptographic primitives.
+  4. Add Documentation for CLI and Lib
 
-- TODO: enhance documentation, enhance the MVP state, enhance error handling.
-
+TODO: enhance documentation, enhance the MVP state, enhance error handling.
 ---

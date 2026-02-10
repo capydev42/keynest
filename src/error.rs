@@ -6,7 +6,7 @@ pub enum StoreError {
     KeyNotFound(String),
 }
 
-impl fmt::Display for StoreError{
+impl fmt::Display for StoreError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             StoreError::KeyAlreadyExists(k) => write!(f, "secret '{k}' already exists"),

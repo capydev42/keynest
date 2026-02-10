@@ -85,7 +85,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     );
                 }
             } else {
-                println!("Name:");
                 for secret_key in kn.list() {
                     println!("{secret_key}");
                 }

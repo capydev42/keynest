@@ -1,11 +1,10 @@
 mod crypto;
-mod storage;
 mod error;
+mod storage;
 mod store;
 
-use crate::store::SecretEntry;
+use crate::{crypto::Header, store::SecretEntry};
 use anyhow::{Context, Result, bail};
-use crypto::{MAGIC_LEN, NONCE_LEN, SALT_LEN, VER_LEN};
 use storage::Storage;
 use store::Store;
 use zeroize::{Zeroize, Zeroizing};
@@ -15,6 +14,7 @@ pub struct Keynest {
     storage: Storage,
     key: [u8; 32],
     salt: [u8; 16],
+    kdf: crypto::KdfParams,
 }
 
 impl Drop for Keynest {
@@ -36,19 +36,19 @@ impl Keynest {
         }
 
         let store = Store::new();
+        let kdf = crypto::KdfParams::default();
         let salt = crypto::generate_salt()?;
-        let key = crypto::derive_key(&*password, &salt)?;
+        let key =
+            crypto::derive_key(&password, &salt, kdf).context("failed to derive encryption key")?;
 
         drop(password);
 
         let plaintext = Zeroizing::new(serde_json::to_vec(&store)?);
         let (ciphertext, nonce) = crypto::encrypt(&key, &plaintext)?;
 
-        let mut file = Vec::new();
-        file.extend_from_slice(b"KNST");
-        file.push(1);
-        file.extend_from_slice(&salt);
-        file.extend_from_slice(&nonce);
+        let header = Header::new(kdf, salt, nonce)?;
+
+        let mut file = header.to_bytes();
         file.extend_from_slice(&ciphertext);
         storage.save(&file)?;
 
@@ -57,6 +57,7 @@ impl Keynest {
             storage,
             key,
             salt,
+            kdf,
         })
     }
 
@@ -70,37 +71,23 @@ impl Keynest {
             bail!("Keynest store does not exist");
         }
 
-        const MIN_LEN: usize = MAGIC_LEN + VER_LEN + SALT_LEN + NONCE_LEN;
-
         let data = storage.load()?;
 
-        if data.len() < MIN_LEN {
-            bail!("Keynest file too short or corrupted");
-        }
-
-        if &data[0..MAGIC_LEN] != b"KNST" {
-            bail!("Invalid keynest file");
-        }
-
-        let salt = &data[MAGIC_LEN + VER_LEN..MAGIC_LEN + VER_LEN + SALT_LEN];
-        let nonce = &data[MAGIC_LEN + VER_LEN + SALT_LEN..MIN_LEN];
-        let ciphertext = &data[MIN_LEN..];
-
-        let key = crypto::derive_key(&*password, salt)?;
+        let (header, offset) = Header::from_bytes(&data)?;
+        let key = crypto::derive_key(&password, header.salt(), *header.kdf())
+            .context("unable to derive encryption key")?;
         drop(password);
 
-        let plaintext = crypto::decrypt(&key, nonce, ciphertext)?;
+        let plaintext = crypto::decrypt(&key, header.nonce(), &data[offset..])?;
         let store = serde_json::from_slice(&plaintext)
             .context("failed to deserialize keystore; possibly wrong password or corrupted data")?;
-        let salt_arr: [u8; 16] = salt
-            .try_into()
-            .context("invalid salt length in keynest file")?;
 
         Ok(Self {
             store,
             storage,
             key,
-            salt: salt_arr,
+            salt: *header.salt(),
+            kdf: *header.kdf(),
         })
     }
 
@@ -135,11 +122,9 @@ impl Keynest {
         let plaintext = Zeroizing::new(serde_json::to_vec(&self.store)?);
         let (ciphertext, nonce) = crypto::encrypt(&self.key, &plaintext)?;
 
-        let mut file = Vec::new();
-        file.extend_from_slice(b"KNST");
-        file.push(1);
-        file.extend_from_slice(&self.salt);
-        file.extend_from_slice(&nonce);
+        let header = Header::new(self.kdf, self.salt, nonce)?;
+
+        let mut file = header.to_bytes();
         file.extend_from_slice(&ciphertext);
         self.storage.save(&file)?;
         Ok(())
@@ -158,6 +143,29 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
+
+    #[test]
+    fn encrypt_decrypt_with_header_roundtrip() {
+        use crate::crypto::*;
+
+        let kdf = KdfParams::default();
+        let salt = generate_salt().unwrap();
+        let key = derive_key("pw", &salt, kdf).unwrap();
+
+        let data = b"secret data".to_vec();
+        let (ciphertext, nonce) = encrypt(&key, &data).unwrap();
+
+        let header = Header::new(kdf, salt, nonce).unwrap();
+
+        let mut file = header.to_bytes();
+        file.extend_from_slice(&ciphertext);
+
+        let (parsed, offset) = Header::from_bytes(&file).unwrap();
+        let key2 = derive_key("pw", parsed.salt(), *parsed.kdf()).unwrap();
+        let plaintext = decrypt(&key2, parsed.nonce(), &file[offset..]).unwrap();
+
+        assert_eq!(*plaintext, data);
+    }
 
     #[test]
     fn init_and_open_with_zeroize_wrappers() {
@@ -200,17 +208,19 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let storage = Storage::new(dir.path().join("keynest.db"));
 
-        let mut kn = Keynest::init_with_storage(Zeroizing::new("pw".to_string()), storage.clone()).unwrap();
+        let mut kn =
+            Keynest::init_with_storage(Zeroizing::new("pw".to_string()), storage.clone()).unwrap();
         kn.set("A", "B").unwrap();
         assert!(kn.set("A", "C").is_err());
     }
 
     #[test]
-    fn update_key_works(){
+    fn update_key_works() {
         let dir = tempfile::tempdir().unwrap();
         let storage = Storage::new(dir.path().join("keynest.db"));
 
-        let mut kn = Keynest::init_with_storage(Zeroizing::new("pw".to_string()), storage.clone()).unwrap();
+        let mut kn =
+            Keynest::init_with_storage(Zeroizing::new("pw".to_string()), storage.clone()).unwrap();
         kn.set("A", "B").unwrap();
         kn.update("A", "C").unwrap();
         assert_eq!(kn.get("A").unwrap(), "C");
@@ -221,17 +231,19 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let storage = Storage::new(dir.path().join("keynest.db"));
 
-        let mut kn = Keynest::init_with_storage(Zeroizing::new("pw".to_string()), storage.clone()).unwrap();
+        let mut kn =
+            Keynest::init_with_storage(Zeroizing::new("pw".to_string()), storage.clone()).unwrap();
         kn.set("A", "B").unwrap();
         assert!(kn.update("Z", "C").is_err());
     }
 
     #[test]
-    fn removing_key_works(){
+    fn removing_key_works() {
         let dir = tempfile::tempdir().unwrap();
         let storage = Storage::new(dir.path().join("keynest.db"));
 
-        let mut kn = Keynest::init_with_storage(Zeroizing::new("pw".to_string()), storage.clone()).unwrap();
+        let mut kn =
+            Keynest::init_with_storage(Zeroizing::new("pw".to_string()), storage.clone()).unwrap();
         kn.set("A", "B").unwrap();
 
         assert_eq!(kn.get("A").unwrap(), "B");
@@ -244,7 +256,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let storage = Storage::new(dir.path().join("keynest.db"));
 
-        let mut kn = Keynest::init_with_storage(Zeroizing::new("pw".to_string()), storage.clone()).unwrap();
+        let mut kn =
+            Keynest::init_with_storage(Zeroizing::new("pw".to_string()), storage.clone()).unwrap();
         assert!(kn.remove("A").is_err());
     }
 
@@ -253,7 +266,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let storage = Storage::new(dir.path().join("keynest.db"));
 
-        let mut kn = Keynest::init_with_storage(Zeroizing::new("pw".to_string()), storage.clone()).unwrap();
+        let mut kn =
+            Keynest::init_with_storage(Zeroizing::new("pw".to_string()), storage.clone()).unwrap();
         kn.set("A", "B").unwrap();
 
         assert!(kn.list().contains(&&"A".to_string()));
@@ -265,9 +279,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let storage = Storage::new(dir.path().join("keynest.db"));
 
-        let mut kn = Keynest::init_with_storage(Zeroizing::new("pw".to_string()), storage.clone()).unwrap();
+        let mut kn =
+            Keynest::init_with_storage(Zeroizing::new("pw".to_string()), storage.clone()).unwrap();
         kn.set("A", "B").unwrap();
-        for sec_entry in kn.list_all(){
+        for sec_entry in kn.list_all() {
             assert_eq!(sec_entry.key(), "A");
             assert_eq!(sec_entry.value(), "B");
             assert_ne!(sec_entry.updated(), "");

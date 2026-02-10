@@ -1,12 +1,11 @@
+use crate::error::StoreError;
 use chrono::Local;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use crate::error::StoreError;
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Store {
     secrets: HashMap<String, SecretEntry>,
-    encryption: String,
     creation_date: String,
 }
 
@@ -48,7 +47,6 @@ impl Store {
     pub fn new() -> Self {
         Store {
             secrets: HashMap::new(),
-            encryption: "ChaCha20".to_string(),
             creation_date: Local::now().to_string(),
         }
     }
@@ -57,8 +55,10 @@ impl Store {
         if self.secrets.contains_key(key) {
             Err(StoreError::KeyAlreadyExists(key.to_string()))
         } else {
-            self.secrets
-                .insert(key.to_string(), SecretEntry::new(key.to_string(), value.to_string()));
+            self.secrets.insert(
+                key.to_string(),
+                SecretEntry::new(key.to_string(), value.to_string()),
+            );
             Ok(())
         }
     }
@@ -80,7 +80,7 @@ impl Store {
             Some(secret) => {
                 secret.update_value(value.to_string());
                 Ok(())
-            },
+            }
             None => Err(StoreError::KeyNotFound(key.to_string())),
         }
     }
@@ -101,7 +101,6 @@ mod tests {
     fn create_new_store_works() {
         let store = Store::new();
         assert_eq!(store.secrets.keys().count(), 0);
-        assert_ne!(store.encryption, "");
         assert_ne!(store.creation_date, "");
     }
 
@@ -150,7 +149,7 @@ mod tests {
     #[test]
     fn remove_not_existing_key_fails() {
         let mut store = Store::new();
-        match store.remove("A"){
+        match store.remove("A") {
             Err(StoreError::KeyNotFound(k)) => assert_eq!(k, "A"),
             other => panic!("expected KeyNotFound, got: {other:?}"),
         }
@@ -168,13 +167,4 @@ mod tests {
         let store = Store::new();
         assert_eq!(store.get("A"), None);
     }
-
-
-
-
-
-
-
-
-
 }
