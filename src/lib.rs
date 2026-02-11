@@ -3,6 +3,7 @@ mod error;
 mod storage;
 mod store;
 
+pub use crate::crypto::KdfParams;
 use crate::{crypto::Header, store::SecretEntry};
 use anyhow::{Context, Result, bail};
 use storage::Storage;
@@ -14,7 +15,7 @@ pub struct Keynest {
     storage: Storage,
     key: [u8; 32],
     salt: [u8; 16],
-    kdf: crypto::KdfParams,
+    kdf: KdfParams,
 }
 
 impl Drop for Keynest {
@@ -26,17 +27,24 @@ impl Drop for Keynest {
 
 impl Keynest {
     pub fn init(password: Zeroizing<String>) -> Result<Self> {
-        let storage = default_storage()?;
-        Self::init_with_storage(password, storage)
+        Self::init_with_kdf(password, KdfParams::default())
     }
 
-    pub fn init_with_storage(password: Zeroizing<String>, storage: Storage) -> Result<Self> {
+    pub fn init_with_kdf(password: Zeroizing<String>, kdf: KdfParams) -> Result<Self> {
+        let storage = default_storage()?;
+        Self::init_with_storage_and_kdf(password, storage, kdf)
+    }
+
+    pub fn init_with_storage_and_kdf(
+        password: Zeroizing<String>,
+        storage: Storage,
+        kdf: KdfParams,
+    ) -> Result<Self> {
         if storage.exists() {
             bail!("Keynest store already exists");
         }
 
         let store = Store::new();
-        let kdf = crypto::KdfParams::default();
         let salt = crypto::generate_salt()?;
         let key =
             crypto::derive_key(&password, &salt, kdf).context("failed to derive encryption key")?;
@@ -173,7 +181,9 @@ mod tests {
         let path = dir.path().join("keynest.db");
         let storage = Storage::new(path);
         let password = Zeroizing::new(String::from("pw"));
-        let mut kn = Keynest::init_with_storage(password, storage.clone()).unwrap();
+        let mut kn =
+            Keynest::init_with_storage_and_kdf(password, storage.clone(), KdfParams::default())
+                .unwrap();
         kn.set("A", "B").unwrap();
         kn.save().unwrap();
 
@@ -189,9 +199,12 @@ mod tests {
         let storage = Storage::new(path);
 
         let password = Zeroizing::new(String::from("pw"));
-        Keynest::init_with_storage(password, storage.clone()).unwrap();
+        Keynest::init_with_storage_and_kdf(password, storage.clone(), KdfParams::default())
+            .unwrap();
         let password = Zeroizing::new(String::from("pw"));
-        assert!(Keynest::init_with_storage(password, storage).is_err());
+        assert!(
+            Keynest::init_with_storage_and_kdf(password, storage, KdfParams::default()).is_err()
+        );
     }
 
     #[test]
@@ -199,7 +212,12 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let storage = Storage::new(dir.path().join("keynest.db"));
 
-        Keynest::init_with_storage(Zeroizing::new("correct".to_string()), storage.clone()).unwrap();
+        Keynest::init_with_storage_and_kdf(
+            Zeroizing::new("correct".to_string()),
+            storage.clone(),
+            KdfParams::default(),
+        )
+        .unwrap();
         assert!(Keynest::open_with_storage(Zeroizing::new("wrong".to_string()), storage).is_err());
     }
 
@@ -208,8 +226,12 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let storage = Storage::new(dir.path().join("keynest.db"));
 
-        let mut kn =
-            Keynest::init_with_storage(Zeroizing::new("pw".to_string()), storage.clone()).unwrap();
+        let mut kn = Keynest::init_with_storage_and_kdf(
+            Zeroizing::new("pw".to_string()),
+            storage.clone(),
+            KdfParams::default(),
+        )
+        .unwrap();
         kn.set("A", "B").unwrap();
         assert!(kn.set("A", "C").is_err());
     }
@@ -219,8 +241,12 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let storage = Storage::new(dir.path().join("keynest.db"));
 
-        let mut kn =
-            Keynest::init_with_storage(Zeroizing::new("pw".to_string()), storage.clone()).unwrap();
+        let mut kn = Keynest::init_with_storage_and_kdf(
+            Zeroizing::new("pw".to_string()),
+            storage.clone(),
+            KdfParams::default(),
+        )
+        .unwrap();
         kn.set("A", "B").unwrap();
         kn.update("A", "C").unwrap();
         assert_eq!(kn.get("A").unwrap(), "C");
@@ -231,8 +257,12 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let storage = Storage::new(dir.path().join("keynest.db"));
 
-        let mut kn =
-            Keynest::init_with_storage(Zeroizing::new("pw".to_string()), storage.clone()).unwrap();
+        let mut kn = Keynest::init_with_storage_and_kdf(
+            Zeroizing::new("pw".to_string()),
+            storage.clone(),
+            KdfParams::default(),
+        )
+        .unwrap();
         kn.set("A", "B").unwrap();
         assert!(kn.update("Z", "C").is_err());
     }
@@ -242,8 +272,12 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let storage = Storage::new(dir.path().join("keynest.db"));
 
-        let mut kn =
-            Keynest::init_with_storage(Zeroizing::new("pw".to_string()), storage.clone()).unwrap();
+        let mut kn = Keynest::init_with_storage_and_kdf(
+            Zeroizing::new("pw".to_string()),
+            storage.clone(),
+            KdfParams::default(),
+        )
+        .unwrap();
         kn.set("A", "B").unwrap();
 
         assert_eq!(kn.get("A").unwrap(), "B");
@@ -256,8 +290,12 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let storage = Storage::new(dir.path().join("keynest.db"));
 
-        let mut kn =
-            Keynest::init_with_storage(Zeroizing::new("pw".to_string()), storage.clone()).unwrap();
+        let mut kn = Keynest::init_with_storage_and_kdf(
+            Zeroizing::new("pw".to_string()),
+            storage.clone(),
+            KdfParams::default(),
+        )
+        .unwrap();
         assert!(kn.remove("A").is_err());
     }
 
@@ -266,8 +304,12 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let storage = Storage::new(dir.path().join("keynest.db"));
 
-        let mut kn =
-            Keynest::init_with_storage(Zeroizing::new("pw".to_string()), storage.clone()).unwrap();
+        let mut kn = Keynest::init_with_storage_and_kdf(
+            Zeroizing::new("pw".to_string()),
+            storage.clone(),
+            KdfParams::default(),
+        )
+        .unwrap();
         kn.set("A", "B").unwrap();
 
         assert!(kn.list().contains(&&"A".to_string()));
@@ -279,8 +321,12 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let storage = Storage::new(dir.path().join("keynest.db"));
 
-        let mut kn =
-            Keynest::init_with_storage(Zeroizing::new("pw".to_string()), storage.clone()).unwrap();
+        let mut kn = Keynest::init_with_storage_and_kdf(
+            Zeroizing::new("pw".to_string()),
+            storage.clone(),
+            KdfParams::default(),
+        )
+        .unwrap();
         kn.set("A", "B").unwrap();
         for sec_entry in kn.list_all() {
             assert_eq!(sec_entry.key(), "A");

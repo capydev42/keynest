@@ -1,7 +1,34 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 mod auth;
-use keynest::Keynest;
+use keynest::{KdfParams, Keynest};
+
+#[derive(Debug, clap::Args)]
+struct Argon2Args {
+    /// Argon2 memory cost in KiB (default: 65536)
+    #[arg(long = "argon-mem")]
+    mem_cost_kib: Option<u32>,
+
+    /// Argon2 time cost / iterations (default: 3)
+    #[arg(long = "argon-time")]
+    time_cost: Option<u32>,
+
+    /// Argon2 parallelism (default: 1)
+    #[arg(long = "argon-parallelism")]
+    parallelism: Option<u32>,
+}
+
+impl Argon2Args {
+    fn to_kdf_params(&self) -> anyhow::Result<KdfParams> {
+        let default = KdfParams::default();
+
+        KdfParams::new(
+            self.mem_cost_kib.unwrap_or(default.mem_cost_kib()),
+            self.time_cost.unwrap_or(default.time_cost()),
+            self.parallelism.unwrap_or(default.parallelism()),
+        )
+    }
+}
 
 #[derive(Debug, Parser)]
 #[command(name = "keynest")]
@@ -17,7 +44,10 @@ struct Cli {
 #[derive(Debug, Subcommand)]
 enum Commands {
     /// Initializes the secret storage
-    Init,
+    Init {
+        #[command(flatten)]
+        argon2: Argon2Args,
+    },
 
     /// Stores a secret by name
     #[command(arg_required_else_help = true)]
@@ -48,10 +78,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Cli::parse();
     let password = auth::read_password()?;
     match args.command {
-        Commands::Init => match Keynest::init(password) {
-            Ok(_) => println!("Keystore initialized"),
-            Err(e) => panic!("Keystore initialization failed: {e}"),
-        },
+        Commands::Init { argon2 } => {
+            let kdf = argon2.to_kdf_params()?;
+            Keynest::init_with_kdf(password, kdf)?;
+            println!("Keystore initialized");
+        }
         Commands::Set { key, value } => {
             let mut kn = Keynest::open(password)?;
             kn.set(&key, &value)?;
