@@ -1,6 +1,6 @@
 use super::kdf::KdfParams;
 use crate::crypto::{MAGIC_LEN, MEM_LEN, NONCE_LEN, PAR_LEN, SALT_LEN, TIME_LEN, VER_LEN};
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 
 pub const VERSION_V1: u8 = 1;
 pub const MAGIC: &[u8; MAGIC_LEN] = b"KNST";

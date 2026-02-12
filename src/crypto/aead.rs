@@ -1,8 +1,8 @@
 use super::{NONCE_LEN, SALT_LEN};
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use chacha20poly1305::{
-    Key, XChaCha20Poly1305, XNonce,
     aead::{Aead, KeyInit},
+    Key, XChaCha20Poly1305, XNonce,
 };
 use getrandom::fill;
 use zeroize::Zeroizing;

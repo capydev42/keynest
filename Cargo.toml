@@ -9,7 +9,8 @@ argon2 = "0.5.3"
 atty = "0.2.14"
 chacha20poly1305 = "0.10.1"
 chrono = "0.4.43"
-clap = {version = "4.5.55", features = ["derive"]}
+clap = {version = "4.5.55", features = ["derive", "env"]}
+directories = "6.0.0"
 getrandom = "0.4.1"
 rpassword = "7.4.0"
 serde = {version = "1.0.228", features = ["derive"]}
@@ -18,5 +19,6 @@ zeroize = "1.8.2"
 
 [dev-dependencies]
 tempfile = "3.24.0"
-
+predicates = "3.1.4"
+assert_cmd = "2.1.2"
 

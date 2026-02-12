@@ -4,9 +4,10 @@ mod storage;
 mod store;
 
 pub use crate::crypto::KdfParams;
+pub use crate::storage::Storage;
 use crate::{crypto::Header, store::SecretEntry};
-use anyhow::{Context, Result, bail};
-use storage::Storage;
+use anyhow::{bail, Context, Result};
+use directories::ProjectDirs;
 use store::Store;
 use zeroize::{Zeroize, Zeroizing};
 
@@ -41,7 +42,7 @@ impl Keynest {
         kdf: KdfParams,
     ) -> Result<Self> {
         if storage.exists() {
-            bail!("Keynest store already exists");
+            bail!("keynest store already exists");
         }
 
         let store = Store::new();
@@ -76,7 +77,7 @@ impl Keynest {
 
     pub fn open_with_storage(password: Zeroizing<String>, storage: Storage) -> Result<Self> {
         if !storage.exists() {
-            bail!("Keynest store does not exist");
+            bail!("keynest store does not exist");
         }
 
         let data = storage.load()?;
@@ -139,10 +140,12 @@ impl Keynest {
     }
 }
 
-fn default_storage() -> Result<Storage> {
-    let path = std::env::current_dir()
-        .context("could not determine current directory")?
-        .join(".keynest.db");
+pub fn default_storage() -> Result<Storage> {
+    let project_dirs =
+        ProjectDirs::from("", "", "keynest").context("could not determine platform directories")?;
+
+    let path = project_dirs.data_dir().join(".keynest.db");
+
     Ok(Storage::new(path))
 }
 

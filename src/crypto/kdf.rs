@@ -101,7 +101,7 @@ mod tests {
     }
     #[test]
     fn kdf_params_affect_output() {
-        use crate::crypto::{KdfParams, derive_key};
+        use crate::crypto::{derive_key, KdfParams};
 
         let salt = [7u8; 16];
 

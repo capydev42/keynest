@@ -1,7 +1,8 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 mod auth;
-use keynest::{KdfParams, Keynest};
+use keynest::{default_storage, KdfParams, Keynest, Storage};
+use std::path::PathBuf;
 
 #[derive(Debug, clap::Args)]
 struct Argon2Args {
@@ -30,6 +31,13 @@ impl Argon2Args {
     }
 }
 
+fn resolve_storage(path: Option<PathBuf>) -> Result<Storage> {
+    match path {
+        Some(p) => Ok(Storage::new(p)),
+        None => default_storage(),
+    }
+}
+
 #[derive(Debug, Parser)]
 #[command(name = "keynest")]
 #[command(
@@ -37,6 +45,10 @@ impl Argon2Args {
     about = "Simple, offline, cross-platform secrets manager written in Rust."
 )]
 struct Cli {
+    ///Path to the keynest storage file
+    #[arg(long, global = true, value_name = "PATH", env = "KEYNEST_PATH")]
+    store: Option<PathBuf>,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -80,30 +92,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     match args.command {
         Commands::Init { argon2 } => {
             let kdf = argon2.to_kdf_params()?;
-            Keynest::init_with_kdf(password, kdf)?;
-            println!("Keystore initialized");
+            let storage = resolve_storage(args.store.clone())?;
+            Keynest::init_with_storage_and_kdf(password, storage, kdf)?;
+            println!("keystore initialized");
         }
         Commands::Set { key, value } => {
-            let mut kn = Keynest::open(password)?;
+            let storage = resolve_storage(args.store.clone())?;
+            let mut kn = Keynest::open_with_storage(password, storage)?;
             kn.set(&key, &value)?;
             kn.save()?;
-            println!("Stored secret '{key}'");
+            println!("stored secret '{key}'");
         }
         Commands::Update { key, new_value } => {
-            let mut kn = Keynest::open(password)?;
+            let storage = resolve_storage(args.store.clone())?;
+            let mut kn = Keynest::open_with_storage(password, storage)?;
             kn.update(&key, &new_value)?;
             kn.save()?;
-            println!("Secret '{key}' updated.");
+            println!("secret '{key}' updated.");
         }
         Commands::Get { key } => {
-            let kn = Keynest::open(password)?;
+            let storage = resolve_storage(args.store.clone())?;
+            let kn = Keynest::open_with_storage(password, storage)?;
             match kn.get(&key) {
                 Some(secret) => println!("{secret}"),
-                None => println!("Key not found"),
+                None => println!("key not found"),
             }
         }
         Commands::List { all } => {
-            let kn = Keynest::open(password)?;
+            let storage = resolve_storage(args.store.clone())?;
+            let kn = Keynest::open_with_storage(password, storage)?;
             if all {
                 println!("Name: \t\t\t Value: \t\t\t Updated:");
 
@@ -122,10 +139,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Commands::Remove { key } => {
-            let mut kn = Keynest::open(password)?;
+            let storage = resolve_storage(args.store.clone())?;
+            let mut kn = Keynest::open_with_storage(password, storage)?;
             kn.remove(&key)?;
             match kn.save() {
-                Ok(_) => println!("Key : '{key}' removed sucessfully"),
+                Ok(_) => println!("key : '{key}' removed successfully"),
                 Err(e) => panic!("Error at removing key : '{key}', {e}"),
             }
         }
