@@ -166,9 +166,7 @@ fn actions_fail_if_store_not_exists() {
         .arg("A")
         .assert()
         .failure()
-        .stderr(predicate::str::contains(
-            "store does not exist",
-        ));
+        .stderr(predicate::str::contains("store does not exist"));
 }
 
 #[test]

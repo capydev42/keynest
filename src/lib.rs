@@ -6,8 +6,9 @@ mod store;
 pub use crate::crypto::KdfParams;
 pub use crate::storage::Storage;
 use crate::{crypto::Header, store::SecretEntry};
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use directories::ProjectDirs;
+use std::path::PathBuf;
 use store::Store;
 use zeroize::{Zeroize, Zeroizing};
 
@@ -15,14 +16,12 @@ pub struct Keynest {
     store: Store,
     storage: Storage,
     key: [u8; 32],
-    salt: [u8; 16],
-    kdf: KdfParams,
+    header: Header,
 }
 
 impl Drop for Keynest {
     fn drop(&mut self) {
         self.key.zeroize();
-        self.salt.zeroize();
     }
 }
 
@@ -65,8 +64,7 @@ impl Keynest {
             store,
             storage,
             key,
-            salt,
-            kdf,
+            header,
         })
     }
 
@@ -95,8 +93,7 @@ impl Keynest {
             store,
             storage,
             key,
-            salt: *header.salt(),
-            kdf: *header.kdf(),
+            header,
         })
     }
 
@@ -127,19 +124,36 @@ impl Keynest {
         self.store.entries().collect()
     }
 
-    pub fn save(&self) -> Result<()> {
+    pub fn save(&mut self) -> Result<()> {
         let plaintext = Zeroizing::new(serde_json::to_vec(&self.store)?);
         let (ciphertext, nonce) = crypto::encrypt(&self.key, &plaintext)?;
 
-        let header = Header::new(self.kdf, self.salt, nonce)?;
+        self.header = Header::new(*self.header.kdf(), *self.header.salt(), nonce)?;
 
-        let mut file = header.to_bytes();
+        let mut file = self.header.to_bytes();
         file.extend_from_slice(&ciphertext);
         self.storage.save(&file)?;
         Ok(())
     }
+
+    pub fn info(&self) -> Result<StoreInfo> {
+        let metadata = std::fs::metadata(self.storage.path())?;
+        Ok(StoreInfo {
+            path: self.storage.path().to_path_buf(),
+            file_size: metadata.len(),
+            creation_date: self.store.creation_date().to_string(),
+            secrets_count: self.store.len(),
+            kdf: *self.header.kdf(),
+            algorithm: "Argon2id",
+            nonce_len: self.header.nonce().len(),
+            version: self.header.version(),
+        })
+    }
 }
 
+// Linux: ~/.local/share/keynest/
+// Mac: ~/Library/Application Support/keynest/
+// Windows: C:\Users\User\AppData\Roaming\youname\keynest\
 pub fn default_storage() -> Result<Storage> {
     let project_dirs =
         ProjectDirs::from("", "", "keynest").context("could not determine platform directories")?;
@@ -147,6 +161,60 @@ pub fn default_storage() -> Result<Storage> {
     let path = project_dirs.data_dir().join(".keynest.db");
 
     Ok(Storage::new(path))
+}
+
+pub struct StoreInfo {
+    path: PathBuf,
+    file_size: u64,
+    creation_date: String,
+    secrets_count: usize,
+    kdf: KdfParams,
+    algorithm: &'static str,
+    nonce_len: usize,
+    version: u8,
+}
+
+impl StoreInfo {
+    pub fn creation_date(&self) -> &str {
+        &self.creation_date
+    }
+
+    pub fn secrets_count(&self) -> usize {
+        self.secrets_count
+    }
+
+    pub fn kdf(&self) -> KdfParams {
+        self.kdf
+    }
+}
+
+impl std::fmt::Display for StoreInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Keynest Store Information")?;
+        writeln!(f, "────────────────────────────────────────")?;
+        writeln!(f)?;
+
+        writeln!(f, "Location")?;
+        writeln!(f, "  Path:              {}", self.path.display())?;
+        writeln!(f, "  Size:              {} bytes", self.file_size)?;
+        writeln!(f, "  Format version:    {}", self.version)?;
+        writeln!(f)?;
+
+        writeln!(f, "Metadata")?;
+        writeln!(f, "  Created:           {}", self.creation_date)?;
+        writeln!(f, "  Secrets stored:    {}", self.secrets_count)?;
+        writeln!(f)?;
+
+        writeln!(f, "Encryption")?;
+        writeln!(f, "  Algorithm:         {}", self.algorithm)?;
+        writeln!(f, "  Nonce length:      {} bytes", self.nonce_len)?;
+        writeln!(f)?;
+
+        writeln!(f, "Key Derivation")?;
+        writeln!(f, "  Memory:            {} KiB", self.kdf.mem_cost_kib())?;
+        writeln!(f, "  Time cost:         {}", self.kdf.time_cost())?;
+        writeln!(f, "  Parallelism:       {}", self.kdf.parallelism())
+    }
 }
 
 #[cfg(test)]

@@ -4,7 +4,7 @@ pub mod kdf;
 
 pub use aead::{decrypt, encrypt, generate_salt};
 pub use header::Header;
-pub use kdf::{derive_key, KdfParams};
+pub use kdf::{KdfParams, derive_key};
 
 pub const SALT_LEN: usize = 16;
 pub const NONCE_LEN: usize = 24;

@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 mod auth;
-use keynest::{default_storage, KdfParams, Keynest, Storage};
+use keynest::{KdfParams, Keynest, Storage, default_storage};
 use std::path::PathBuf;
 
 #[derive(Debug, clap::Args)]
@@ -84,6 +84,9 @@ enum Commands {
     /// Removes secrets by name
     #[command(arg_required_else_help = true)]
     Remove { key: String },
+
+    /// Shows information about the store
+    Info,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -122,15 +125,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let storage = resolve_storage(args.store.clone())?;
             let kn = Keynest::open_with_storage(password, storage)?;
             if all {
-                println!("Name: \t\t\t Value: \t\t\t Updated:");
+                let entries = kn.list_all();
 
-                for secret_entry in kn.list_all() {
-                    println!(
-                        "{}\t\t\t {} \t\t\t {}",
-                        secret_entry.key(),
-                        secret_entry.value(),
-                        secret_entry.updated()
-                    );
+                if entries.is_empty() {
+                    println!("No secrets stored.");
+                    return Ok(());
+                }
+
+                let key_width = entries
+                    .iter()
+                    .map(|e| e.key().len())
+                    .chain(std::iter::once("Key".len()))
+                    .max()
+                    .unwrap();
+
+                let updated_width = entries
+                    .iter()
+                    .map(|e| e.updated().len())
+                    .chain(std::iter::once("Updated".len()))
+                    .max()
+                    .unwrap();
+
+                println!("{:<key_width$}  {:<updated_width$}", "Key", "Updated");
+                println!("{:-<key_width$}  {:-<updated_width$}", "", "");
+
+                for e in entries {
+                    println!("{:<key_width$}  {:<updated_width$}", e.key(), e.updated());
                 }
             } else {
                 for secret_key in kn.list() {
@@ -146,6 +166,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Ok(_) => println!("key : '{key}' removed successfully"),
                 Err(e) => panic!("Error at removing key : '{key}', {e}"),
             }
+        }
+
+        Commands::Info => {
+            let storage = resolve_storage(args.store.clone())?;
+            let kn = Keynest::open_with_storage(password, storage.clone())?;
+            let info = kn.info()?;
+            println!("{info}");
         }
     }
 

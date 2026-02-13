@@ -91,6 +91,14 @@ impl Store {
     pub fn entries(&self) -> impl Iterator<Item = &SecretEntry> {
         self.secrets.values()
     }
+
+    pub fn creation_date(&self) -> &str {
+        &self.creation_date
+    }
+
+    pub fn len(&self) -> usize {
+        self.secrets.len()
+    }
 }
 
 #[cfg(test)]

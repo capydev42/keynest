@@ -26,4 +26,8 @@ impl Storage {
         }
         Ok(fs::write(&self.path, data)?)
     }
+
+    pub fn path(&self) -> &PathBuf {
+        &self.path
+    }
 }

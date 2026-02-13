@@ -1,6 +1,6 @@
 use super::kdf::KdfParams;
 use crate::crypto::{MAGIC_LEN, MEM_LEN, NONCE_LEN, PAR_LEN, SALT_LEN, TIME_LEN, VER_LEN};
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 
 pub const VERSION_V1: u8 = 1;
 pub const MAGIC: &[u8; MAGIC_LEN] = b"KNST";
@@ -36,6 +36,10 @@ impl Header {
 
     pub fn nonce(&self) -> &[u8; NONCE_LEN] {
         &self.nonce
+    }
+
+    pub fn version(&self) -> u8 {
+        self.version
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
