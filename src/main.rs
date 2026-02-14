@@ -61,6 +61,12 @@ enum Commands {
         argon2: Argon2Args,
     },
 
+    /// Change password and/or argon2 parametes and re-encrypt keystore
+    Rekey {
+        #[command(flatten)]
+        argon2: Argon2Args,
+    },
+
     /// Stores a secret by name
     #[command(arg_required_else_help = true)]
     Set { key: String, value: String },
@@ -167,12 +173,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Err(e) => panic!("Error at removing key : '{key}', {e}"),
             }
         }
-
         Commands::Info => {
             let storage = resolve_storage(args.store.clone())?;
             let kn = Keynest::open_with_storage(password, storage.clone())?;
             let info = kn.info()?;
             println!("{info}");
+        }
+        Commands::Rekey { argon2 } => {
+            let storage = resolve_storage(args.store.clone())?;
+            let mut kn = Keynest::open_with_storage(password, storage)?;
+
+            let new_password = auth::read_new_password_with_confirmation()?;
+
+            let kdf = argon2.to_kdf_params()?;
+            kn.rekey(new_password, kdf)?;
+
+            println!("store successfully rekeyed");
         }
     }
 

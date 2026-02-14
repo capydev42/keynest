@@ -1,5 +1,5 @@
 use anyhow::{Result, bail};
-use std::io::{self, Read};
+use std::io::{self, BufRead, Read};
 use zeroize::Zeroizing;
 
 pub fn read_password() -> Result<Zeroizing<String>> {
@@ -33,4 +33,49 @@ pub fn read_password() -> Result<Zeroizing<String>> {
     }
 
     bail!("No password provided")
+}
+
+pub fn read_new_password_with_confirmation() -> Result<Zeroizing<String>> {
+    if !atty::is(atty::Stream::Stdin) {
+        let stdin = io::stdin();
+        let mut handle = stdin.lock();
+
+        let mut pw1 = Zeroizing::new(String::new());
+        let mut pw2 = Zeroizing::new(String::new());
+
+        handle.read_line(&mut pw1)?;
+        handle.read_line(&mut pw2)?;
+
+        trim_newline(&mut pw1);
+        trim_newline(&mut pw2);
+
+        if pw1.is_empty() {
+            bail!("password cannot be empty");
+        }
+
+        if pw1 != pw2 {
+            bail!("passwords do not match");
+        }
+
+        return Ok(pw1);
+    }
+
+    let pw1 = rpassword::prompt_password("New password: ")?;
+    let pw2 = rpassword::prompt_password("Confirm password: ")?;
+
+    if pw1.is_empty() {
+        bail!("password cannot be empty");
+    }
+
+    if pw1 != pw2 {
+        bail!("passwords do not match");
+    }
+
+    Ok(Zeroizing::new(pw1))
+}
+
+fn trim_newline(s: &mut String) {
+    while s.ends_with('\n') || s.ends_with('\r') {
+        s.pop();
+    }
 }

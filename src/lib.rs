@@ -149,6 +149,29 @@ impl Keynest {
             version: self.header.version(),
         })
     }
+
+    pub fn rekey(&mut self, new_password: Zeroizing<String>, new_kdf: KdfParams) -> Result<()> {
+        let new_salt = crypto::generate_salt()?;
+
+        let new_key = crypto::derive_key(&new_password, &new_salt, new_kdf)
+            .context("failed to derive new enryption key")?;
+
+        drop(new_password);
+
+        let plaintext = Zeroizing::new(serde_json::to_vec(&self.store)?);
+        let (ciphertext, nonce) = crypto::encrypt(&new_key, &plaintext)?;
+
+        self.header = Header::new(new_kdf, new_salt, nonce)?;
+
+        let mut file = self.header.to_bytes();
+        file.extend_from_slice(&ciphertext);
+        self.storage.save(&file)?;
+
+        self.key.zeroize();
+        self.key = new_key;
+
+        Ok(())
+    }
 }
 
 // Linux: ~/.local/share/keynest/
@@ -404,5 +427,74 @@ mod tests {
             assert_eq!(sec_entry.value(), "B");
             assert_ne!(sec_entry.updated(), "");
         }
+    }
+
+    #[test]
+    fn rekey_changes_password() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Storage::new(dir.path().join("keynest.db"));
+
+        let mut kn = Keynest::init_with_storage_and_kdf(
+            Zeroizing::new("old".to_string()),
+            storage.clone(),
+            KdfParams::default(),
+        )
+        .unwrap();
+        kn.set("A", "B").unwrap();
+        kn.save().unwrap();
+
+        //reopen
+        let mut kn =
+            Keynest::open_with_storage(Zeroizing::new("old".to_string()), storage.clone()).unwrap();
+
+        //rekey
+        kn.rekey(Zeroizing::new("new".to_string()), KdfParams::default())
+            .unwrap();
+
+        assert!(
+            Keynest::open_with_storage(Zeroizing::new("old".to_string()), storage.clone()).is_err()
+        );
+
+        let kn2 = Keynest::open_with_storage(Zeroizing::new("new".to_string()), storage).unwrap();
+
+        assert_eq!(kn2.get("A"), Some("B"));
+    }
+
+    #[test]
+    fn rekey_changes_kdf_parameters() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Storage::new(dir.path().join("keynest.db"));
+
+        let original_kdf = KdfParams::default();
+
+        // init
+        let mut kn = Keynest::init_with_storage_and_kdf(
+            Zeroizing::new("pw".to_string()),
+            storage.clone(),
+            original_kdf,
+        )
+        .unwrap();
+
+        kn.save().unwrap();
+
+        // reopen
+        let mut kn =
+            Keynest::open_with_storage(Zeroizing::new("pw".to_string()), storage.clone()).unwrap();
+
+        // neue Parameter
+        let new_kdf = KdfParams::new(
+            original_kdf.mem_cost_kib() * 2,
+            original_kdf.time_cost() + 1,
+            original_kdf.parallelism(),
+        )
+        .unwrap();
+
+        kn.rekey(Zeroizing::new("pw".to_string()), new_kdf).unwrap();
+
+        // reopen mit neuem password
+        let kn2 = Keynest::open_with_storage(Zeroizing::new("pw".to_string()), storage).unwrap();
+
+        assert_eq!(kn2.header.kdf().mem_cost_kib(), new_kdf.mem_cost_kib());
+        assert_eq!(kn2.header.kdf().time_cost(), new_kdf.time_cost());
     }
 }

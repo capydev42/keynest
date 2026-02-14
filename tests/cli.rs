@@ -42,9 +42,7 @@ fn set_and_get_roundtrip() {
         .env("KEYNEST_PASSWORD", "pw")
         .arg("--store")
         .arg(&store)
-        .arg("set")
-        .arg("A")
-        .arg("B")
+        .args(["set", "A", "B"])
         .assert()
         .success()
         .stdout(predicate::str::contains("stored secret"));
@@ -54,8 +52,7 @@ fn set_and_get_roundtrip() {
         .env("KEYNEST_PASSWORD", "pw")
         .arg("--store")
         .arg(&store)
-        .arg("get")
-        .arg("A")
+        .args(["get", "A"])
         .assert()
         .success()
         .stdout(predicate::str::contains("B"));
@@ -80,9 +77,7 @@ fn set_existing_key_twice_fails() {
         .env("KEYNEST_PASSWORD", "pw")
         .arg("--store")
         .arg(&store)
-        .arg("set")
-        .arg("A")
-        .arg("B")
+        .args(["set", "A", "B"])
         .assert()
         .success();
 
@@ -91,9 +86,7 @@ fn set_existing_key_twice_fails() {
         .env("KEYNEST_PASSWORD", "pw")
         .arg("--store")
         .arg(&store)
-        .arg("set")
-        .arg("A")
-        .arg("C")
+        .args(["set", "A", "C"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("already exists"));
@@ -118,8 +111,7 @@ fn wrong_password_fails() {
         .env("KEYNEST_PASSWORD", "wrong_pw")
         .arg("--store")
         .arg(&store)
-        .arg("get")
-        .arg("A")
+        .args(["get", "A"])
         .assert()
         .failure()
         .stderr(predicate::str::contains(
@@ -162,8 +154,7 @@ fn actions_fail_if_store_not_exists() {
         .env("KEYNEST_PASSWORD", "pw")
         .arg("--store")
         .arg(&store)
-        .arg("get")
-        .arg("A")
+        .args(["get", "A"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("store does not exist"));
@@ -188,9 +179,7 @@ fn remove_secret_works() {
         .env("KEYNEST_PASSWORD", "pw")
         .arg("--store")
         .arg(&store)
-        .arg("set")
-        .arg("A")
-        .arg("B")
+        .args(["set", "A", "B"])
         .assert()
         .success();
 
@@ -199,8 +188,7 @@ fn remove_secret_works() {
         .env("KEYNEST_PASSWORD", "pw")
         .arg("--store")
         .arg(&store)
-        .arg("remove")
-        .arg("A")
+        .args(["remove", "A"])
         .assert()
         .success()
         .stdout(predicate::str::contains("removed successfully"));
@@ -210,8 +198,7 @@ fn remove_secret_works() {
         .env("KEYNEST_PASSWORD", "pw")
         .arg("--store")
         .arg(&store)
-        .arg("get")
-        .arg("A")
+        .args(["get", "A"])
         .assert()
         .success()
         .stdout(predicate::str::contains("not found"));
@@ -227,13 +214,15 @@ fn init_with_custom_argon2_parameters() {
         .env("KEYNEST_PASSWORD", "pw")
         .arg("--store")
         .arg(&store)
-        .arg("init")
-        .arg("--argon-mem")
-        .arg("32768")
-        .arg("--argon-time")
-        .arg("2")
-        .arg("--argon-parallelism")
-        .arg("1")
+        .args([
+            "init",
+            "--argon-mem",
+            "32768",
+            "--argon-time",
+            "2",
+            "--argon-parallelism",
+            "1",
+        ])
         .assert()
         .success();
 }
@@ -248,11 +237,156 @@ fn init_with_incomplete_argon2_parameters() {
         .env("KEYNEST_PASSWORD", "pw")
         .arg("--store")
         .arg(&store)
-        .arg("init")
-        .arg("--argon-mem")
-        .arg("32768")
-        .arg("--argon-time")
-        .arg("2")
+        .args(["init", "--argon-mem", "32768", "--argon-time", "2"])
         .assert()
         .success();
+}
+
+#[test]
+fn rekey_to_change_pw_works() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+
+    // init
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["set", "A", "B"])
+        .assert()
+        .success();
+
+    // rekey
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("rekey")
+        .write_stdin("newpw\nnewpw\n")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("successfully"));
+
+    //old password should not work
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["get", "A"])
+        .assert()
+        .failure();
+
+    // new password should work
+    bin()
+        .env("KEYNEST_PASSWORD", "newpw")
+        .arg("--store")
+        .arg(&store)
+        .args(["get", "A"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("B"));
+}
+
+#[test]
+fn rekey_only_changes_kdf_password_stays_valid() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+
+    // init
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    // rekey with stronger KDF
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["rekey", "--argon-mem", "131072"])
+        .write_stdin("pw\npw\n")
+        .assert()
+        .success();
+
+    // password still works
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("info")
+        .assert()
+        .success();
+}
+
+#[test]
+fn rekey_updates_argon2_parameters() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+
+    // init with default
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    // rekey with new memory cost
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("rekey")
+        .arg("--argon-mem")
+        .arg("131072")
+        .write_stdin("pw\npw\n")
+        .assert()
+        .success();
+
+    // check info
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("info")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("131072"));
+}
+
+#[test]
+fn rekey_fails_if_password_confirmation_mismatch() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+
+    // init
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    // mismatch
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("rekey")
+        .write_stdin("newpw\nwrongpw\n")
+        .assert()
+        .failure();
 }
