@@ -41,6 +41,7 @@ Keynest aims to:
 - Minimize attack surface by avoiding unnecessary features
 - Remain fully auditable as open source software
 - Avoid network access entirely
+- Securely handle sensitive data in memory (zeroization)
 
 ---
 
@@ -57,9 +58,13 @@ Keynest does **not** aim to protect against:
 
 ## Cryptography
 
-Keynest relies exclusively on well-established cryptographic primitives and libraries.
+Keynest relies exclusively on well-established cryptographic primitives and libraries:
+
+- **Key Derivation:** Argon2id with configurable parameters
+- **Encryption:** XChaCha20-Poly1305 (AEAD)
+- **Randomness:** `getrandom` crate for cryptographic random generation
 
 Custom cryptography is explicitly avoided.
 
-Details can be found in the Crypto Architecture documentation.
+Details can be found in [CRYPTO.md](CRYPTO.md).
 

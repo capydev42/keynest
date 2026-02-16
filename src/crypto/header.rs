@@ -1,10 +1,15 @@
+//! File header for the keystore format.
+
 use super::kdf::KdfParams;
 use crate::crypto::{MAGIC_LEN, MEM_LEN, NONCE_LEN, PAR_LEN, SALT_LEN, TIME_LEN, VER_LEN};
 use anyhow::{Context, Result, bail};
 
+/// Current file format version.
 pub const VERSION_V1: u8 = 1;
+/// Magic bytes identifying a keynest file ("KNST").
 pub const MAGIC: &[u8; MAGIC_LEN] = b"KNST";
 
+/// File header containing metadata for the keystore.
 #[derive(Debug)]
 pub struct Header {
     version: u8,
@@ -14,9 +19,11 @@ pub struct Header {
 }
 
 impl Header {
+    /// Total length of the header in bytes.
     pub const LEN: usize =
         MAGIC_LEN + VER_LEN + MEM_LEN + TIME_LEN + PAR_LEN + SALT_LEN + NONCE_LEN;
 
+    /// Creates a new header with the given parameters.
     pub fn new(kdf: KdfParams, salt: [u8; SALT_LEN], nonce: [u8; NONCE_LEN]) -> Result<Self> {
         Ok(Self {
             version: VERSION_V1,
@@ -26,22 +33,27 @@ impl Header {
         })
     }
 
+    /// Returns the KDF parameters.
     pub fn kdf(&self) -> &KdfParams {
         &self.kdf
     }
 
+    /// Returns the salt used for key derivation.
     pub fn salt(&self) -> &[u8; SALT_LEN] {
         &self.salt
     }
 
+    /// Returns the nonce used for encryption.
     pub fn nonce(&self) -> &[u8; NONCE_LEN] {
         &self.nonce
     }
 
+    /// Returns the file format version.
     pub fn version(&self) -> u8 {
         self.version
     }
 
+    /// Serializes the header to bytes.
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut buf = Vec::with_capacity(Self::LEN);
 

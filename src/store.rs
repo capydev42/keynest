@@ -1,14 +1,20 @@
+//! In-memory secret storage.
+
 use crate::error::StoreError;
 use chrono::Local;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// In-memory secret store.
+///
+/// Holds all secrets in a HashMap with metadata.
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Store {
     secrets: HashMap<String, SecretEntry>,
     creation_date: String,
 }
 
+/// A single secret entry with key, value, and timestamp.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SecretEntry {
     key: String,
@@ -25,14 +31,17 @@ impl SecretEntry {
         }
     }
 
+    /// Returns the secret key.
     pub fn key(&self) -> &str {
         &self.key
     }
 
+    /// Returns the secret value.
     pub fn value(&self) -> &str {
         &self.value
     }
 
+    /// Returns the last update timestamp.
     pub fn updated(&self) -> &str {
         &self.updated
     }
@@ -44,6 +53,7 @@ impl SecretEntry {
 }
 
 impl Store {
+    /// Creates a new empty store.
     pub fn new() -> Self {
         Store {
             secrets: HashMap::new(),
@@ -51,6 +61,11 @@ impl Store {
         }
     }
 
+    /// Stores a secret.
+    ///
+    /// # Errors
+    ///
+    /// Returns `StoreError::KeyAlreadyExists` if key already exists.
     pub fn set(&mut self, key: &str, value: &str) -> Result<(), StoreError> {
         if self.secrets.contains_key(key) {
             Err(StoreError::KeyAlreadyExists(key.to_string()))
@@ -63,10 +78,16 @@ impl Store {
         }
     }
 
+    /// Retrieves a secret by key.
     pub fn get(&self, key: &str) -> Option<&str> {
         self.secrets.get(key).map(|e| e.value())
     }
 
+    /// Removes a secret.
+    ///
+    /// # Errors
+    ///
+    /// Returns `StoreError::KeyNotFound` if key doesn't exist.
     pub fn remove(&mut self, key: &str) -> Result<(), StoreError> {
         if self.secrets.remove(key).is_some() {
             Ok(())
@@ -75,6 +96,11 @@ impl Store {
         }
     }
 
+    /// Updates an existing secret.
+    ///
+    /// # Errors
+    ///
+    /// Returns `StoreError::KeyNotFound` if key doesn't exist.
     pub fn update(&mut self, key: &str, value: &str) -> Result<(), StoreError> {
         match self.secrets.get_mut(key) {
             Some(secret) => {
@@ -84,18 +110,23 @@ impl Store {
             None => Err(StoreError::KeyNotFound(key.to_string())),
         }
     }
+
+    /// Returns an iterator over all keys.
     pub fn keys(&self) -> impl Iterator<Item = &String> {
         self.secrets.keys()
     }
 
+    /// Returns an iterator over all secret entries.
     pub fn entries(&self) -> impl Iterator<Item = &SecretEntry> {
         self.secrets.values()
     }
 
+    /// Returns the creation date of the store.
     pub fn creation_date(&self) -> &str {
         &self.creation_date
     }
 
+    /// Returns the number of secrets stored.
     pub fn len(&self) -> usize {
         self.secrets.len()
     }

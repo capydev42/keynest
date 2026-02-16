@@ -1,8 +1,6 @@
 # Cryptographic Architecture
 
-This document describes the cryptographic design that the current implementation
-uses. The goal is to protect secrets at rest using well-reviewed primitives while
-keeping the file format simple and auditable.
+This document describes the cryptographic design used by Keynest to protect secrets at rest using well-reviewed primitives.
 
 ---
 
@@ -13,145 +11,144 @@ keeping the file format simple and auditable.
 - Encrypt everything at rest
 - Fail safely on authentication errors
 - Keep the file format simple and versioned
+- Use secure memory handling (zeroization)
 
 ---
 
 ## High-Level Overview
 
 1. The user provides a master password
-2. A cryptographic key is derived using a password-based key derivation function
-3. All secrets are serialized into a single data structure
-4. The serialized data is encrypted and authenticated
-5. The encrypted blob is stored on disk
+2. A cryptographic key is derived using Argon2id
+3. All secrets are serialized into a JSON structure
+4. The serialized data is encrypted with ChaCha20-Poly1305
+5. The encrypted blob is stored on disk with metadata header
 
 ---
 
-## Key Derivation (implementation)
+## Key Derivation
 
-- **Algorithm used:** Argon2 via `argon2::Argon2::default()` (the crate's default
-  configuration — typically Argon2id with default parameters). The code calls
-  `hash_password_into(password.as_bytes(), salt, &mut key)` to fill a 32-byte key.
-- **Purpose:** derive a 256-bit (32 byte) symmetric key from the user password.
+- **Algorithm:** Argon2id (via `argon2` crate)
+- **Version:** Argon2 v0x13 (recommended version)
+- **Output:** 256-bit (32 byte) symmetric key
 
-Inputs:
-- Master password (UTF-8)
-- Random salt (16 bytes)
+### Default Parameters
+| Parameter | Default Value |
+|-----------|---------------|
+| Memory Cost | 64 MiB (65536 KiB) |
+| Time Cost | 3 iterations |
+| Parallelism | 1 thread |
 
-Output:
-- 256-bit symmetric encryption key (32 bytes)
+### Customization
+Users can customize KDF parameters via CLI:
+```bash
+keynest init --argon-mem 131072 --argon-time 4 --argon-parallelism 2
+```
 
-Note: the implementation currently uses the library default Argon2 parameters.
-For production use you should make parameters explicit and tuned for your
-deployment (memory size, iterations, parallelism). See "Future work" below.
-
----
-
-## Encryption (implementation)
-
-- **Algorithm used:** XChaCha20-Poly1305 (via `chacha20poly1305::XChaCha20Poly1305`).
-  This AEAD provides confidentiality and integrity and uses a 24-byte nonce
-  (XNonce) which reduces risk of accidental nonce reuse compared to 12-byte
-  nonces.
-
-Properties provided by the AEAD:
-- Confidentiality: ciphertext hides plaintext without the derived key.
-- Integrity / authentication: tampering or wrong keys causes decryption to fail.
-
-The implementation generates a fresh 24-byte random nonce for each encryption
-operation using `getrandom::fill`.
-
-Note: no additional associated data (AAD) is used in the current implementation.
+Parameters are stored in the file header for future verification.
 
 ---
 
-## On-disk format (actual implementation)
+## Encryption
 
-The current file layout written by the library is exactly:
+- **Algorithm:** XChaCha20-Poly1305 (AEAD)
+- **Nonce:** 24 bytes (XNonce)
+- **Key:** 32 bytes (derived from password)
 
-MAGIC (4) | VERSION (1) | SALT (16) | NONCE (24) | CIPHERTEXT
+Properties:
+- **Confidentiality:** ciphertext hides plaintext without the derived key
+- **Integrity:** tampering or wrong keys causes decryption to fail
+- **Fresh nonce:** a new random nonce is generated for each encryption
 
-- `MAGIC` = ASCII `KNST` (4 bytes)
-- `VERSION` = single byte (current implementation uses `1`)
-- `SALT` = 16 bytes (SALT_LEN)
-- `NONCE` = 24 bytes (NONCE_LEN for XChaCha20-Poly1305)
-- `CIPHERTEXT` = remaining bytes (authenticated ciphertext)
+---
 
-The code checks the 4-byte magic and version and then extracts salt/nonces at
-the following offsets when opening a file (example):
-- salt: bytes 5..21 (16 bytes)
-- nonce: bytes 21..45 (24 bytes)
+## On-disk Format
 
-The ciphertext is the bytes after offset 45 and is decrypted with the derived
-key and nonce.
+```
+MAGIC (4) | VERSION (1) | MEM_COST (4) | TIME_COST (4) | PARALLELISM (4) | SALT (16) | NONCE (24) | CIPHERTEXT
+```
+
+| Field | Size | Description |
+|-------|------|-------------|
+| MAGIC | 4 bytes | ASCII `KNST` |
+| VERSION | 1 byte | File format version (currently 1) |
+| MEM_COST | 4 bytes | Argon2 memory cost (KiB) |
+| TIME_COST | 4 bytes | Argon2 time cost (iterations) |
+| PARALLELISM | 4 bytes | Argon2 parallelism |
+| SALT | 16 bytes | Random salt for key derivation |
+| NONCE | 24 bytes | Random nonce for encryption |
+| CIPHERTEXT | variable | Authenticated encrypted data |
+
+**Total header size:** 53 bytes
 
 ---
 
 ## Serialization
 
-- Secrets are serialized with `serde_json` (JSON) and the full serialized blob
-  is encrypted as a single unit. The implementation writes only the encrypted
-  blob to disk; no plaintext is persisted.
-
-Note: JSON is convenient and auditable but not the most compact. Consider a
-binary format for size-sensitive scenarios.
+- Secrets are serialized with `serde_json` (JSON)
+- The full serialized blob is encrypted as a single unit
+- Only the encrypted blob is written to disk (no plaintext persisted)
 
 ---
 
-## Memory handling (current and recommendations)
+## Memory Handling
 
-- Current implementation uses fixed-size stack/heap buffers for key/salt/nonce
-  and does not yet explicitly zeroize secrets after use.
-- Recommendation: add the `zeroize` crate (or similar) to zero secret material
-  (derived keys, plaintext buffers) as soon as they are no longer needed. For
-  higher assurance consider OS-backed secure memory guards.
+- The `zeroize` crate is used for secure memory cleanup
+- Derived keys are zeroized after use
+- The `Drop` trait is implemented for `Keynest` to ensure cleanup
 
----
+```rust
+impl Drop for Keynest {
+    fn drop(&mut self) {
+        self.key.zeroize();
+    }
+}
+```
 
-## Error handling in code
-
-- Decryption errors are translated into a generic error (`anyhow!("Invalid
-  password or corrupted data")`) so callers do not receive partial plaintext.
-- Other failures use contextual error messages (e.g. "key derivation failed",
-  "encryption failed", "OS random generator unavailable"). Avoid exposing
-  secrets in error text.
-
-Ensure callers handle errors gracefully and do not print secret material to
-logs or STDOUT in production code.
+Note: The salt is stored in the `Header` which is persisted to disk, not kept in memory-only.
 
 ---
 
-## Threat Model Summary
+## Error Handling
 
-Protected against:
+- Decryption errors return: `"Invalid password or corrupted data"`
+- Other failures use contextual messages: `"key derivation failed"`, `"encryption failed"`
+- No secrets are exposed in error messages
+
+---
+
+## Threat Model
+
+### Protected Against
 - Offline attacks on the encrypted store
 - Accidental plaintext exposure
-- File tampering
+- File tampering (AEAD authentication)
 
-Not protected against:
+### Not Protected Against
 - Compromised runtime environments
 - Weak master passwords
 - Malicious binaries
+- Memory scraping attacks
 
 ---
 
-## Future work / considerations
+## Future Considerations
 
-1. Make Argon2 parameters explicit and provide a clear migration path for
-   changing them (store parameter set/version alongside salt).
-2. Introduce zeroization of secrets (`zeroize` crate) after use.
-3. Consider using a constant-time memcmp for file format checks if concerned
-   about timing side-channels.
-4. Add file-format versioning and backward-compatibility handling.
-5. Consider HSM/OS-level integrations for secret storage in higher-security
-   deployments.
+1. Versioned file format for backward compatibility
+2. Constant-time comparisons for timing attack mitigation
+3. HSM/OS-level integrations for higher security
+
+---
 
 ## Summary
 
-The implementation uses:
+| Component | Implementation |
+|-----------|----------------|
+| KDF | Argon2id (configurable) |
+| Encryption | XChaCha20-Poly1305 |
+| Nonce | 24 bytes (random per encryption) |
+| Salt | 16 bytes (random per keystore) |
+| Serialization | JSON (serde_json) |
+| Memory | zeroize crate for secure cleanup |
+| File Version | V1 |
 
-- Argon2 (crate default) to derive a 32-byte key from a password + 16-byte salt
-- XChaCha20-Poly1305 (24-byte nonce) for authenticated encryption
-- JSON (serde_json) for serialization
-
-This design favors simplicity and modern primitives; before production use
-review Argon2 parameters, add zeroization, and perform a security audit.
+This design prioritizes simplicity and modern, well-audited cryptographic primitives.

@@ -1,8 +1,11 @@
+//! Key derivation using Argon2.
+
 use anyhow::{Context, Result};
 use argon2::{Algorithm, Argon2, Params, Version};
 
 use super::KEY_LEN;
 
+/// Parameters for Argon2id key derivation.
 #[derive(Debug, Clone, Copy)]
 pub struct KdfParams {
     mem_cost_kib: u32,
@@ -24,6 +27,11 @@ impl Default for KdfParams {
 }
 
 impl KdfParams {
+    /// Creates new KDF parameters with validation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if parameters don't meet minimum requirements.
     pub fn new(mem_cost_kib: u32, time_cost: u32, parallelism: u32) -> anyhow::Result<Self> {
         let params = Self {
             mem_cost_kib,
@@ -34,18 +42,30 @@ impl KdfParams {
         Ok(params)
     }
 
+    /// Returns the memory cost in KiB.
     pub fn mem_cost_kib(&self) -> u32 {
         self.mem_cost_kib
     }
 
+    /// Returns the time cost (iterations).
     pub fn time_cost(&self) -> u32 {
         self.time_cost
     }
 
+    /// Returns the parallelism factor.
     pub fn parallelism(&self) -> u32 {
         self.parallelism
     }
 
+    /// Validates the parameters meet minimum requirements.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Memory cost < 8 KiB
+    /// - Time cost < 1
+    /// - Parallelism < 1
+    /// - Memory < 8 * parallelism
     pub fn validate(&self) -> anyhow::Result<()> {
         if self.mem_cost_kib < 8 {
             anyhow::bail!("argon2 memory cost too low");
@@ -63,6 +83,13 @@ impl KdfParams {
     }
 }
 
+/// Derives a 256-bit key from a password using Argon2id.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - KDF parameters are invalid
+/// - Argon2 fails to derive the key
 pub fn derive_key(password: &str, salt: &[u8], kdf: KdfParams) -> Result<[u8; KEY_LEN]> {
     kdf.validate().context("invalid Argon2 parameters")?;
 

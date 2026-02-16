@@ -1,3 +1,31 @@
+//! Keynest - Simple, offline, cross-platform secrets manager
+//!
+//! Keynest provides secure local secret storage using Argon2id for key derivation
+//! and XChaCha20-Poly1305 for authenticated encryption.
+//!
+//! # Security
+//!
+//! For detailed cryptographic architecture, see [CRYPTO.md](https://github.com/capydev42/keynest/blob/main/CRYPTO.md).
+//! For security policy and vulnerability reporting, see [SECURITY.md](https://github.com/capydev42/keynest/blob/main/SECURITY.md).
+//!
+//! # Quick Start
+//!
+//! ```ignore
+//! use keynest::{Keynest, Storage};
+//! use zeroize::Zeroizing;
+//!
+//! // Create a new keystore
+//! let mut kn = Keynest::init(Zeroizing::new("password".to_string())).unwrap();
+//!
+//! // Store secrets
+//! kn.set("api_key", "secret123").unwrap();
+//! kn.save().unwrap();
+//!
+//! // Later: reopen the keystore
+//! let kn = Keynest::open(Zeroizing::new("password".to_string())).unwrap();
+//! assert_eq!(kn.get("api_key"), Some("secret123"));
+//! ```
+
 mod crypto;
 mod error;
 mod storage;
@@ -12,6 +40,26 @@ use std::path::PathBuf;
 use store::Store;
 use zeroize::{Zeroize, Zeroizing};
 
+/// A secure keystore for storing secrets locally.
+///
+/// `Keynest` provides methods to initialize, open, and manage a local encrypted
+/// keystore. All secrets are encrypted at rest using XChaCha20-Poly1305 with a
+/// key derived from your password using Argon2id.
+///
+/// The struct holds sensitive data (encryption key) which is zeroized on drop
+/// for secure memory handling.
+///
+/// # Example
+///
+/// ```ignore
+/// use keynest::{Keynest, Storage};
+/// use zeroize::Zeroizing;
+///
+/// let storage = Storage::new("/path/to/keystore.db");
+/// let mut kn = Keynest::init_with_storage(Zeroizing::new("password"), storage).unwrap();
+/// kn.set("key", "value").unwrap();
+/// kn.save().unwrap();
+/// ```
 pub struct Keynest {
     store: Store,
     storage: Storage,
@@ -26,15 +74,55 @@ impl Drop for Keynest {
 }
 
 impl Keynest {
+    /// Creates a new keystore with the default KDF parameters.
+    ///
+    /// Uses default storage location (`~/.local/share/keynest/.keynest.db` on Linux).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - A keystore already exists at the default location
+    /// - Key derivation fails
+    /// - Encryption fails
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use keynest::Keynest;
+    /// use zeroize::Zeroizing;
+    ///
+    /// let kn = Keynest::init(Zeroizing::new("password".to_string())).unwrap();
+    /// ```
     pub fn init(password: Zeroizing<String>) -> Result<Self> {
         Self::init_with_kdf(password, KdfParams::default())
     }
 
+    /// Creates a new keystore with custom KDF parameters.
+    ///
+    /// Uses default storage location. Useful for customizing Argon2 settings.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use keynest::{Keynest, KdfParams};
+    /// use zeroize::Zeroizing;
+    ///
+    /// let kdf = KdfParams::new(131072, 4, 2).unwrap();
+    /// let kn = Keynest::init_with_kdf(Zeroizing::new("password".to_string()), kdf).unwrap();
+    /// ```
     pub fn init_with_kdf(password: Zeroizing<String>, kdf: KdfParams) -> Result<Self> {
         let storage = default_storage()?;
         Self::init_with_storage_and_kdf(password, storage, kdf)
     }
 
+    /// Creates a new keystore with custom storage location and KDF parameters.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - A keystore already exists at the given storage path
+    /// - Key derivation fails
+    /// - Encryption fails
     pub fn init_with_storage_and_kdf(
         password: Zeroizing<String>,
         storage: Storage,
@@ -68,11 +156,27 @@ impl Keynest {
         })
     }
 
+    /// Opens an existing keystore with the default storage location.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - No keystore exists at the default location
+    /// - The password is incorrect
+    /// - The keystore is corrupted
     pub fn open(password: Zeroizing<String>) -> Result<Self> {
         let storage = default_storage()?;
         Self::open_with_storage(password, storage)
     }
 
+    /// Opens an existing keystore from a custom storage location.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - No keystore exists at the given storage path
+    /// - The password is incorrect
+    /// - The keystore is corrupted
     pub fn open_with_storage(password: Zeroizing<String>, storage: Storage) -> Result<Self> {
         if !storage.exists() {
             bail!("keynest store does not exist");
@@ -97,33 +201,68 @@ impl Keynest {
         })
     }
 
+    /// Stores a secret in the keystore.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a secret with the given key already exists.
+    /// Use `update` to change an existing secret.
     pub fn set(&mut self, key: &str, value: &str) -> Result<()> {
         self.store.set(key, value)?;
         Ok(())
     }
 
+    /// Retrieves a secret by key.
+    ///
+    /// Returns `None` if the key does not exist.
     pub fn get(&self, key: &str) -> Option<&str> {
         self.store.get(key)
     }
 
+    /// Updates an existing secret's value.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the key does not exist.
+    /// Use `set` to create a new secret.
     pub fn update(&mut self, key: &str, value: &str) -> Result<()> {
         self.store.update(key, value)?;
         Ok(())
     }
 
+    /// Removes a secret from the keystore.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the key does not exist.
     pub fn remove(&mut self, key: &str) -> Result<()> {
         self.store.remove(key)?;
         Ok(())
     }
 
+    /// Lists all secret keys.
+    ///
+    /// Returns a vector of references to the key strings.
     pub fn list(&self) -> Vec<&String> {
         self.store.keys().collect()
     }
 
+    /// Lists all secrets with their metadata.
+    ///
+    /// Returns a vector of references to `SecretEntry` containing
+    /// key, value, and update timestamp.
     pub fn list_all(&self) -> Vec<&SecretEntry> {
         self.store.entries().collect()
     }
 
+    /// Persists the keystore to storage.
+    ///
+    /// Must be called after making changes (set, update, remove)
+    /// to save them to disk.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if writing to storage fails.
     pub fn save(&mut self) -> Result<()> {
         let plaintext = Zeroizing::new(serde_json::to_vec(&self.store)?);
         let (ciphertext, nonce) = crypto::encrypt(&self.key, &plaintext)?;
@@ -136,6 +275,14 @@ impl Keynest {
         Ok(())
     }
 
+    /// Returns information about the keystore.
+    ///
+    /// Includes file path, size, creation date, secret count,
+    /// and KDF/encryption parameters.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage metadata cannot be read.
     pub fn info(&self) -> Result<StoreInfo> {
         let metadata = std::fs::metadata(self.storage.path())?;
         Ok(StoreInfo {
@@ -150,6 +297,22 @@ impl Keynest {
         })
     }
 
+    /// Changes the password and/or KDF parameters.
+    ///
+    /// Re-encrypts the keystore with a new key derived from the new password
+    /// and optional new KDF parameters. The existing secrets are preserved.
+    ///
+    /// # Arguments
+    ///
+    /// * `new_password` - The new password to derive the encryption key from
+    /// * `new_kdf` - The new KDF parameters (can be different from current)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Key derivation fails
+    /// - Encryption fails
+    /// - Writing to storage fails
     pub fn rekey(&mut self, new_password: Zeroizing<String>, new_kdf: KdfParams) -> Result<()> {
         let new_salt = crypto::generate_salt()?;
 
@@ -174,9 +337,16 @@ impl Keynest {
     }
 }
 
-// Linux: ~/.local/share/keynest/
-// Mac: ~/Library/Application Support/keynest/
-// Windows: C:\Users\User\AppData\Roaming\youname\keynest\
+/// Returns the default storage location for the keystore.
+///
+/// The default location is platform-specific:
+/// - Linux: `~/.local/share/keynest/.keynest.db`
+/// - macOS: `~/Library/Application Support/keynest/.keynest.db`
+/// - Windows: `%APPDATA%\keynest\.keynest.db`
+///
+/// # Errors
+///
+/// Returns an error if the platform-specific directories cannot be determined.
 pub fn default_storage() -> Result<Storage> {
     let project_dirs =
         ProjectDirs::from("", "", "keynest").context("could not determine platform directories")?;
@@ -186,6 +356,9 @@ pub fn default_storage() -> Result<Storage> {
     Ok(Storage::new(path))
 }
 
+/// Information about a keystore.
+///
+/// Returned by [`Keynest::info`].
 pub struct StoreInfo {
     path: PathBuf,
     file_size: u64,
@@ -198,14 +371,17 @@ pub struct StoreInfo {
 }
 
 impl StoreInfo {
+    /// Returns the keystore creation date.
     pub fn creation_date(&self) -> &str {
         &self.creation_date
     }
 
+    /// Returns the number of secrets stored.
     pub fn secrets_count(&self) -> usize {
         self.secrets_count
     }
 
+    /// Returns the KDF parameters used for key derivation.
     pub fn kdf(&self) -> KdfParams {
         self.kdf
     }
