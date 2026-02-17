@@ -1,6 +1,10 @@
-# Keynest 🐦🔐
+# Keynest
 
-Keynest is a simple, offline, cross-platform secrets manager written in Rust.
+[![crates.io](https://img.shields.io/crates/v/keynest.svg)](https://crates.io/crates/keynest)
+[![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](https://opensource.org/licenses/MIT)
+[![CI](https://github.com/capydev42/keynest/actions/workflows/ci.yml/badge.svg)](https://github.com/capydev42/keynest/actions/workflows/ci.yml)
+
+Simple, offline, cross-platform secrets manager written in Rust.
 
 Store your secrets securely in an encrypted local file — no cloud, no server, no daemon.
 
@@ -10,179 +14,201 @@ Store your secrets securely in an encrypted local file — no cloud, no server, 
 
 Keynest fills the gap between insecure `.env` files and heavyweight secrets managers.
 
-Modern development workflows need secrets everywhere — locally, in scripts, in CI — but existing solutions are often either **too insecure** or **too complex** for small projects and individual developers.
-
-Keynest is designed for developers who want:
-
-- **Strong security** without infrastructure
+- **Strong security** without infrastructure (Argon2id + ChaCha20Poly1305)
 - **Offline-first** secrets management
 - **Portability** across machines and environments
-- **A simple CLI** that works well with scripts and automation
-
-Unlike cloud-based password managers or server-backed vaults, Keynest stores secrets **locally in an encrypted file**, requires **no account, no daemon, and no network access**, and behaves the same on every platform.
-
-In short:  
-**Keynest is for developers who want secure secrets without the operational burden.**
+- **Simple CLI** that works well with scripts and automation
 
 ---
 
-## How to use
+## Installation
 
-This repository provides two ways to interact with Keynest:
+### From crates.io
 
-- Library API (embed Keynest in other Rust applications)
-- Command-line executable (standalone CLI to manage secrets)
-
-> Note: This project is an MVP. Do not use it as-is for production secrets management — see the security TODOs below.
-
-### Build & test (quick commands)
-
-- Build (debug): `cargo build`
-- Build (release): `cargo build --release`
-- Run CLI: `cargo run -- <command>` (runs the executable in the workspace)
-- Run all tests: `cargo test`
-- Run a single unit test by name:
-
-  ```bash
-  # run a specific test function
-  cargo test init_and_open_work
-
-  # show test output (disable capture)
-  cargo test init_and_open_work -- --nocapture
-  ```
-
-- Format and lint:
-  - `cargo fmt`
-  - `cargo clippy -- -D warnings`
-
----
-
-### Library usage (embed Keynest)
-
-Add this crate as a dependency (for local development):
-
-```toml
-# In your project's Cargo.toml
-[dependencies]
-keynest = { path = "../keynest" }
+```bash
+cargo install keynest
 ```
 
-Example usage (basic flow):
+### From source
+
+```bash
+cargo install --git https://github.com/capydev42/keynest.git
+```
+
+Or build locally:
+
+```bash
+cargo build --release
+./target/release/keynest
+```
+
+---
+
+## Quick Start
+
+```bash
+# Initialize a new keystore
+keynest init
+
+# Store a secret
+keynest set github_token "ghp_xxxx"
+
+# Retrieve a secret
+keynest get github_token
+
+# List all keys
+keynest list
+
+# Update a secret
+keynest update github_token "ghp_yyyy"
+
+# Remove a secret
+keynest remove github_token
+
+# Show keystore info (KDF params, creation date)
+keynest info
+
+# Change password (and optionally KDF parameters)
+keynest rekey
+keynest rekey --argon-mem 131072  # upgrade memory cost
+```
+
+---
+
+## CLI Commands
+
+| Command | Description |
+|---------|-------------|
+| `init` | Initialize a new keystore |
+| `set <key> <value>` | Store a secret |
+| `get <key>` | Retrieve a secret |
+| `update <key> <value>` | Update existing secret |
+| `list [--all]` | List keys (--all shows values & timestamps) |
+| `remove <key>` | Remove a secret |
+| `info` | Show keystore information (KDF params, creation date) |
+| `rekey` | Change password and/or KDF parameters |
+
+---
+
+## Features
+
+### Security
+- **Encryption:** ChaCha20-Poly1305 (AEAD)
+- **Key Derivation:** Argon2id with configurable parameters
+- **Secure Memory:** Keys and passwords are zeroized after use
+
+### CLI Options
+- `--store <path>` - Specify custom keystore location
+
+### KDF Options (for init/rekey)
+- `--argon-mem <kb>` - Memory cost in KiB (default: 65536)
+- `--argon-time <n>` - Time cost / iterations (default: 3)
+- `--argon-parallelism <n>` - Parallelism (default: 1)
+
+### Password Input
+Keynest accepts passwords via:
+1. Environment variable: `KEYNEST_PASSWORD="secret" keynest get key`
+2. Stdin: `echo "secret" | keynest get key`
+3. Interactive prompt (default)
+
+---
+
+## Library Usage
+
+Add to your `Cargo.toml`:
+
+```toml
+[dependencies]
+keynest = "0.1"
+```
+
+### Simple example (default storage location)
 
 ```rust
 use keynest::Keynest;
 use anyhow::Result;
+use zeroize::Zeroizing;
 
-fn demo() -> Result<()> {
-    // Create a new keystore (prompts or accepts password in your code)
-    let mut kn = Keynest::init("my-password")?;
-
+fn main() -> Result<()> {
+    let password = Zeroizing::new(String::from("my-password"));
+    
+    // Create new keystore
+    let mut kn = Keynest::init(password.clone())?;
+    
     // Store secrets
-    kn.set("api_token", "supersecret")?;
-    kn.set("db_password", "hunter2")?;
-
-    // Persist changes
+    kn.set("api_token", "secret123")?;
     kn.save()?;
-
-    // Re-open later
-    let kn2 = Keynest::open("my-password")?;
-    assert_eq!(kn2.get("api_token"), Some(&"supersecret".to_string()));
-
+    
+    // Later: reopen
+    let kn = Keynest::open(password)?;
+    assert_eq!(kn.get("api_token"), Some("secret123"));
+    
     Ok(())
 }
 ```
 
-Notes:
-- Use `Keynest::init` to create a new keystore, and `Keynest::open` to load an existing one.
-- Call `save()` after making changes to persist them.
-- Prefer using the API from a secure runtime (avoid hard-coding passwords).
+### Advanced example (custom storage location)
+
+```rust
+use keynest::{Keynest, KdfParams, Storage};
+use anyhow::Result;
+use zeroize::Zeroizing;
+
+fn main() -> Result<()> {
+    let storage = Storage::new("/path/to/keystore.db");
+    let password = Zeroizing::new(String::from("my-password"));
+    
+    // Create new keystore with custom KDF parameters
+    let kdf = KdfParams::default();
+    let mut kn = Keynest::init_with_storage_and_kdf(password, storage, kdf)?;
+    
+    // Store secrets
+    kn.set("api_token", "secret123")?;
+    kn.save()?;
+    
+    // Later: reopen
+    let kn = Keynest::open_with_storage(Zeroizing::new(String::from("my-password")), storage)?;
+    assert_eq!(kn.get("api_token"), Some("secret123"));
+    
+    Ok(())
+}
+```
 
 ---
 
-### CLI usage (executable)
+## Storage Location
 
-Build and run:
-```bash
-# Run the CLI with cargo
-cargo run -- <subcommand> [args]
-```
+Default keystore locations by OS:
+- **Linux:** `~/.local/share/keynest/.keynest.db`
+- **macOS:** `~/Library/Application Support/keynest/.keynest.db`
+- **Windows:** `%APPDATA%\keynest\.keynest.db`
 
-The CLI will prompt for a password (it reads the password securely from the terminal). Example interactive session:
-
-```bash
-# initialize store (you'll be prompted for a password)
-cargo run -- init
-# Output:
-# > Enter password: ****
-# Keystore initialized
-
-# store a secret
-cargo run -- set mykey "secret-value"
-# Enter password: ****
-# Stored secret 'mykey'
-
-# get a secret
-cargo run -- get mykey
-# Enter password: ****
-# secret-value
-
-# list keys
-cargo run -- list
-# Enter password: ****
-# Name:
-# mykey
-
-# remove a key
-cargo run -- remove mykey
-# Enter password: ****
-# Key : 'mykey' removed sucessfully
-```
-
-Subcommands:
-- `init` — initialize the keystore
-- `set <key> <value>` — store a secret
-- `get <key>` — retrieve a secret
-- `update <key> <new_value>` — update existing secret
-- `list [--all]` — list keys; with `--all` show names, values and timestamps
-- `remove <key>` — remove a secret
-
-Password input
-
-- Keynest accepts the password in three ways (in order of precedence):
-  1. Environment variable: `KEYNEST_PASSWORD` — e.g. `KEYNEST_PASSWORD="supersecret" keynest get github_token`
-  2. Piped via stdin (useful in scripts): `echo "supersecret" | keynest get github_token` or
-     `printf "%s" "$KEYNEST_PASSWORD" | keynest get github_token`
-  3. Interactive TTY prompt (fallback): when neither of the above are provided the CLI will prompt
-     you to type a password securely.
-
-Examples:
-
-```bash
-# Use environment variable
-KEYNEST_PASSWORD="supersecret" cargo run -- get github_token
-
-# Pipe password on stdin
-echo "supersecret" | cargo run -- get github_token
-
-# Interactive prompt (no env var or stdin)
-cargo run -- get github_token
-# Password: ****
-```
-
-Notes:
-- Supplying the password via environment variable or stdin is convenient for automation, but treat
-  those approaches carefully: avoid leaving secrets in shell history or process tables and prefer
-  ephemeral CI secrets or secure secret stores when available.
+Use `--store <path>` to override.
 
 ---
 
-### Security & TODOs (MVP caveats)
+## Development
 
-- This is an MVP. Before production use:
-  1. Add CLI options for custom argon2 parameters
-  2. Add CI: `cargo fmt`, `cargo clippy`, tests.
-  3. Add integration/end-to-end tests and an audit of cryptographic primitives.
-  4. Add Documentation for CLI and Lib
+```bash
+# Build
+cargo build
 
-TODO: enhance documentation, enhance the MVP state, enhance error handling.
+# Test
+cargo test
+
+# Format
+cargo fmt
+
+# Lint
+cargo clippy -- -D warnings
+```
+
 ---
+
+## License
+
+Licensed under either of:
+- Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+
+at your option.
