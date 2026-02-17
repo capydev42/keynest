@@ -1,14 +1,14 @@
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 use std::io::{self, BufRead, Read};
 use zeroize::Zeroizing;
 
 pub fn read_password() -> Result<Zeroizing<String>> {
     //  Environment Variable
     //  KEYNEST_PASSWORD="supersecret" keynest get github_token
-    if let Ok(pw) = std::env::var("KEYNEST_PASSWORD")
-        && !pw.is_empty()
-    {
-        return Ok(Zeroizing::new(pw));
+    if let Ok(pw) = std::env::var("KEYNEST_PASSWORD") {
+        if !pw.is_empty() {
+            return Ok(Zeroizing::new(pw));
+        }
     }
 
     //  stdin (Pipeline)
