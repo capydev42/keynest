@@ -2,6 +2,12 @@
 name = "keynest"
 version = "0.1.0"
 edition = "2024"
+description = "Simple, offline, cross-platform secrets manager written in Rust"
+repository = "https://github.com/capydev42/keynest"
+keywords = ["secrets", "password", "encryption", "vault", "cli", "rust", "security", "cryptography", "argon2"]
+categories = ["command-line-utilities", "cryptography", "security"]
+license = "MIT OR Apache-2.0"
+rust-version = "1.85"
 
 [dependencies]
 anyhow = "1.0.100"
