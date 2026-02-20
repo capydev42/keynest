@@ -291,7 +291,7 @@ impl Keynest {
             creation_date: self.store.creation_date().to_string(),
             secrets_count: self.store.len(),
             kdf: *self.header.kdf(),
-            algorithm: "Argon2id",
+            algorithm: "ChaCha20-Poly1305",
             nonce_len: self.header.nonce().len(),
             version: self.header.version(),
         })

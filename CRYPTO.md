@@ -32,16 +32,22 @@ This document describes the cryptographic design used by Keynest to protect secr
 - **Output:** 256-bit (32 byte) symmetric key
 
 ### Default Parameters
-| Parameter | Default Value |
-|-----------|---------------|
-| Memory Cost | 64 MiB (65536 KiB) |
-| Time Cost | 3 iterations |
-| Parallelism | 1 thread |
 
-### Customization
-Users can customize KDF parameters via CLI:
+| Parameter | Default Value | Recommendation Source |
+|-----------|---------------|----------------------|
+| Memory Cost | 64 MiB (65536 KiB) | [OWASP](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html#argon2id) (minimum 46-64 MiB) |
+| Time Cost | 3 iterations | [OWASP](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html#argon2id) (minimum 1) |
+| Parallelism | 1 thread | Security & compatibility |
+
+The default values are based on [OWASP Password Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html#argon2id) recommendations and provide a good balance between security and performance:
+
+- **Memory (64 MiB):** Protects against GPU/ASIC brute-force attacks. OWASP recommends at least 46-64 MiB for sensitive applications.
+- **Time (3):** A reasonable compromise between security and usability. Higher values increase security but slow down key derivation.
+- **Parallelism (1):** Simplest compatibility across different systems. Can be increased by advanced users.
+
+For higher security (at the cost of performance):
 ```bash
-keynest init --argon-mem 131072 --argon-time 4 --argon-parallelism 2
+keynest init --argon-mem 131072 --argon-time 5 --argon-parallelism 4
 ```
 
 Parameters are stored in the file header for future verification.
