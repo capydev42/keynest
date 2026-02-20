@@ -111,11 +111,17 @@ impl Storage {
     ///
     /// Uses Windows `ReplaceFileW` API with `REPLACEFILE_WRITE_THROUGH` flag
     /// to ensure the operation is truly atomic and persisted to disk.
+    /// If the target file doesn't exist (first save), uses simple rename.
     #[cfg(target_os = "windows")]
     fn atomic_replace(&self, tmp_path: &Path) -> Result<()> {
         use std::ffi::OsStr;
         use std::os::windows::ffi::OsStrExt;
         use windows_sys::Win32::Storage::FileSystem::{REPLACEFILE_WRITE_THROUGH, ReplaceFileW};
+
+        // If target doesn't exist, just rename (first save case)
+        if !self.path.exists() {
+            return fs::rename(tmp_path, &self.path).context("failed to create initial file");
+        }
 
         fn to_wide(s: &OsStr) -> Vec<u16> {
             s.encode_wide().chain(std::iter::once(0)).collect()
