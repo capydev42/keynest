@@ -134,8 +134,8 @@ impl Storage {
                 tmp_w.as_ptr(),
                 std::ptr::null(),
                 REPLACEFILE_WRITE_THROUGH,
-                0,
-                0,
+                std::ptr::null(),
+                std::ptr::null(),
             )
         };
 
