@@ -1,10 +1,13 @@
 //! Storage backend for keystore files.
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use getrandom::fill;
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+
+#[cfg(not(target_os = "windows"))]
+use std::fs::File;
 
 /// A storage backend for persisting keystore data.
 ///
@@ -58,17 +61,18 @@ impl Storage {
 
         let tmp_path = self.random_tmp_path()?;
 
-        // securely create temp file (fail if exists)
-        let mut tmp_file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&tmp_path)
-            .context("failed to create temporary file")?;
+        {
+            // securely create temp file (fail if exists)
+            let mut tmp_file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&tmp_path)
+                .context("failed to create temporary file")?;
 
-        // write data
-        tmp_file.write_all(data)?;
-        tmp_file.sync_all()?; //fsync file
-        drop(tmp_file);
+            // write data
+            tmp_file.write_all(data)?;
+            tmp_file.sync_all()?; //fsync file
+        }
 
         //atomic replace
         if let Err(e) = self.atomic_replace(&tmp_path) {
@@ -77,6 +81,7 @@ impl Storage {
         }
 
         // fsync directory
+        #[cfg(not(target_os = "windows"))]
         if let Some(parent) = self.path.parent() {
             let dir = File::open(parent)?;
             dir.sync_all()?;
@@ -100,7 +105,11 @@ impl Storage {
 
         let rand_string = buf.iter().map(|b| format!("{:02x}", b)).collect::<String>();
 
-        let file_name = self.path.file_name().unwrap().to_string_lossy();
+        let file_name = self
+            .path
+            .file_name()
+            .ok_or_else(|| anyhow!("invalid storage path"))?
+            .to_string_lossy();
 
         let tmp_name = format!("{}.tmp.{}", file_name, rand_string);
 
@@ -116,12 +125,11 @@ impl Storage {
     fn atomic_replace(&self, tmp_path: &Path) -> Result<()> {
         use std::ffi::OsStr;
         use std::os::windows::ffi::OsStrExt;
-        use windows_sys::Win32::Storage::FileSystem::{REPLACEFILE_WRITE_THROUGH, ReplaceFileW};
-
-        // If target doesn't exist, just rename (first save case)
-        if !self.path.exists() {
-            return fs::rename(tmp_path, &self.path).context("failed to create initial file");
-        }
+        use windows_sys::Win32::Foundation::GetLastError;
+        use windows_sys::Win32::{
+            Foundation::ERROR_FILE_NOT_FOUND,
+            Storage::FileSystem::{REPLACEFILE_WRITE_THROUGH, ReplaceFileW},
+        };
 
         fn to_wide(s: &OsStr) -> Vec<u16> {
             s.encode_wide().chain(std::iter::once(0)).collect()
@@ -145,12 +153,21 @@ impl Storage {
             )
         };
 
-        if result == 0 {
-            let err = std::io::Error::last_os_error();
-            return Err(err).context("atomic replace failed");
+        if result != 0 {
+            return Ok(());
         }
 
-        Ok(())
+        // replace failed -> why
+        let err_code = unsafe { GetLastError() };
+
+        if err_code == ERROR_FILE_NOT_FOUND {
+            // First save: store file does not exist yet
+            fs::rename(tmp_path, &self.path).context("failed to create initial file")?;
+            return Ok(());
+        }
+
+        // real error
+        Err(std::io::Error::from_raw_os_error(err_code as i32)).context("atomic replace failed")
     }
 
     /// Atomically replaces the target file with the temporary file.
