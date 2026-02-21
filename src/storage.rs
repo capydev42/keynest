@@ -1,8 +1,13 @@
 //! Storage backend for keystore files.
 
-use anyhow::Result;
-use std::fs;
-use std::path::PathBuf;
+use anyhow::{Context, Result, anyhow};
+use getrandom::fill;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
+use std::path::{Path, PathBuf};
+
+#[cfg(not(target_os = "windows"))]
+use std::fs::File;
 
 /// A storage backend for persisting keystore data.
 ///
@@ -33,7 +38,16 @@ impl Storage {
         Ok(fs::read(&self.path)?)
     }
 
-    /// Saves data to the storage file.
+    /// Saves data to the storage file using atomic write.
+    ///
+    /// This method ensures crash-safety by:
+    /// 1. Writing data to a temporary file with random name
+    /// 2. Syncing the temporary file to disk
+    /// 3. Atomically replacing the old file with the new one
+    /// 4. Syncing the parent directory to ensure the rename is persisted
+    ///
+    /// If a crash occurs during save, either the old or new file will be present,
+    /// never a corrupted partial write.
     ///
     /// Creates parent directories if they don't exist.
     ///
@@ -44,11 +58,285 @@ impl Storage {
         if let Some(parent) = self.path.parent() {
             fs::create_dir_all(parent)?;
         }
-        Ok(fs::write(&self.path, data)?)
+
+        let tmp_path = self.random_tmp_path()?;
+
+        {
+            // securely create temp file (fail if exists)
+            let mut tmp_file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&tmp_path)
+                .context("failed to create temporary file")?;
+
+            // write data
+            tmp_file.write_all(data)?;
+            tmp_file.sync_all()?; //fsync file
+        }
+
+        //atomic replace
+        if let Err(e) = self.atomic_replace(&tmp_path) {
+            let _ = fs::remove_file(&tmp_path);
+            return Err(e);
+        }
+
+        // fsync directory
+        #[cfg(not(target_os = "windows"))]
+        if let Some(parent) = self.path.parent() {
+            let dir = File::open(parent)?;
+            dir.sync_all()?;
+        }
+
+        Ok(())
     }
 
     /// Returns the path to the storage file.
     pub fn path(&self) -> &PathBuf {
         &self.path
+    }
+
+    /// Generates a unique temporary file path in the same directory.
+    ///
+    /// Uses cryptographically secure random bytes to avoid name collisions.
+    /// Format: `filename.tmp.<randomhex>`
+    fn random_tmp_path(&self) -> Result<PathBuf> {
+        let mut buf = [0u8; 8]; // 64 bit entropy
+        fill(&mut buf)?;
+
+        let rand_string = buf.iter().map(|b| format!("{:02x}", b)).collect::<String>();
+
+        let file_name = self
+            .path
+            .file_name()
+            .ok_or_else(|| anyhow!("invalid storage path"))?
+            .to_string_lossy();
+
+        let tmp_name = format!("{}.tmp.{}", file_name, rand_string);
+
+        Ok(self.path.with_file_name(tmp_name))
+    }
+
+    /// Atomically replaces the target file with the temporary file.
+    ///
+    /// Uses Windows `ReplaceFileW` API with `REPLACEFILE_WRITE_THROUGH` flag
+    /// to ensure the operation is truly atomic and persisted to disk.
+    /// If the target file doesn't exist (first save), uses simple rename.
+    #[cfg(target_os = "windows")]
+    fn atomic_replace(&self, tmp_path: &Path) -> Result<()> {
+        use std::ffi::OsStr;
+        use std::os::windows::ffi::OsStrExt;
+        use windows_sys::Win32::Foundation::GetLastError;
+        use windows_sys::Win32::{
+            Foundation::ERROR_FILE_NOT_FOUND,
+            Storage::FileSystem::{REPLACEFILE_WRITE_THROUGH, ReplaceFileW},
+        };
+
+        fn to_wide(s: &OsStr) -> Vec<u16> {
+            s.encode_wide().chain(std::iter::once(0)).collect()
+        }
+
+        let target_w = to_wide(self.path.as_os_str());
+        let tmp_w = to_wide(tmp_path.as_os_str());
+
+        // SAFETY:
+        // - Strings are valid UTF-16 and null-terminated
+        // - Pointers remain valid during the call
+        // - Windows does not retain the pointers after return
+        let result = unsafe {
+            ReplaceFileW(
+                target_w.as_ptr(),
+                tmp_w.as_ptr(),
+                std::ptr::null(),
+                REPLACEFILE_WRITE_THROUGH,
+                std::ptr::null(),
+                std::ptr::null(),
+            )
+        };
+
+        if result != 0 {
+            return Ok(());
+        }
+
+        // replace failed -> why
+        let err_code = unsafe { GetLastError() };
+
+        if err_code == ERROR_FILE_NOT_FOUND {
+            // First save: store file does not exist yet
+            fs::rename(tmp_path, &self.path).context("failed to create initial file")?;
+            return Ok(());
+        }
+
+        // real error
+        Err(std::io::Error::from_raw_os_error(err_code as i32)).context("atomic replace failed")
+    }
+
+    /// Atomically replaces the target file with the temporary file.
+    ///
+    /// On Unix, `rename()` is atomic when both paths are on the same filesystem.
+    #[cfg(not(target_os = "windows"))]
+    fn atomic_replace(&self, tmp_path: &Path) -> Result<()> {
+        fs::rename(tmp_path, &self.path)?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::tempdir;
+
+    // --------------------------------------------------
+    // LOAD TESTS
+    // --------------------------------------------------
+
+    #[test]
+    fn load_returns_written_data() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("store.db");
+
+        let storage = Storage::new(path.clone());
+        storage.save(b"hello world").unwrap();
+
+        let data = storage.load().unwrap();
+        assert_eq!(data, b"hello world");
+    }
+
+    #[test]
+    fn load_fails_if_file_does_not_exist() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("missing.db");
+
+        let storage = Storage::new(path);
+
+        let result = storage.load();
+        assert!(result.is_err());
+    }
+
+    // --------------------------------------------------
+    // EXISTS TESTS
+    // --------------------------------------------------
+
+    #[test]
+    fn exists_returns_false_if_missing() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("store.db");
+
+        let storage = Storage::new(path);
+        assert!(!storage.exists());
+    }
+
+    #[test]
+    fn exists_returns_true_after_save() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("store.db");
+
+        let storage = Storage::new(path.clone());
+        storage.save(b"data").unwrap();
+
+        assert!(storage.exists());
+    }
+
+    // --------------------------------------------------
+    // RANDOM TMP PATH TESTS
+    // --------------------------------------------------
+
+    #[test]
+    fn random_tmp_path_has_same_parent() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("store.db");
+
+        let storage = Storage::new(path.clone());
+
+        let tmp = storage.random_tmp_path().unwrap();
+
+        assert_eq!(tmp.parent(), path.parent());
+    }
+
+    #[test]
+    fn random_tmp_path_is_not_equal_to_final_path() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("store.db");
+
+        let storage = Storage::new(path.clone());
+
+        let tmp = storage.random_tmp_path().unwrap();
+
+        assert_ne!(tmp, path);
+    }
+
+    #[test]
+    fn tmp_names_are_unique() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("store.db");
+
+        let storage = Storage::new(path);
+
+        let a = storage.random_tmp_path().unwrap();
+        let b = storage.random_tmp_path().unwrap();
+
+        assert_ne!(a, b);
+    }
+
+    // --------------------------------------------------
+    // SAVE EDGE CASES
+    // --------------------------------------------------
+
+    #[test]
+    fn save_overwrites_large_data() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("store.db");
+
+        let storage = Storage::new(path.clone());
+
+        let large = vec![42u8; 10_000];
+        storage.save(&large).unwrap();
+
+        let loaded = storage.load().unwrap();
+        assert_eq!(loaded.len(), 10_000);
+        assert_eq!(loaded, large);
+    }
+
+    #[test]
+    fn save_replaces_existing_file() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("store.db");
+
+        let storage = Storage::new(path.clone());
+
+        storage.save(b"first").unwrap();
+        storage.save(b"second").unwrap();
+
+        let content = fs::read(path).unwrap();
+        assert_eq!(content, b"second");
+    }
+
+    #[test]
+    fn tmp_file_is_removed_after_success() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("store.db");
+
+        let storage = Storage::new(path.clone());
+        storage.save(b"data").unwrap();
+
+        let entries: Vec<_> = fs::read_dir(dir.path())
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0], "store.db");
+    }
+
+    #[test]
+    fn parent_directory_is_created() {
+        let dir = tempdir().unwrap();
+
+        let nested = dir.path().join("a").join("b").join("c").join("store.db");
+
+        let storage = Storage::new(nested.clone());
+        storage.save(b"data").unwrap();
+
+        assert!(nested.exists());
     }
 }
