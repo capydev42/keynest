@@ -110,7 +110,7 @@ impl Drop for Keynest {
 }
 ```
 
-Note: The salt is stored in the `Header` which is persisted to disk, not kept in memory-only.
+Note: The salt is stored in the file format (KeystoreFile) which is persisted to disk, not kept in memory-only.
 
 ---
 
