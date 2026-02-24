@@ -28,12 +28,14 @@
 
 mod crypto;
 mod error;
+mod format;
 mod storage;
 mod store;
 
 pub use crate::crypto::KdfParams;
+use crate::format::{KeystoreFile, parse, serialize};
 pub use crate::storage::Storage;
-use crate::{crypto::Header, store::SecretEntry};
+use crate::store::SecretEntry;
 use anyhow::{Context, Result, bail};
 use directories::ProjectDirs;
 use std::path::PathBuf;
@@ -52,11 +54,12 @@ use zeroize::{Zeroize, Zeroizing};
 /// # Example
 ///
 /// ```ignore
-/// use keynest::{Keynest, Storage};
+/// use keynest::{Keynest, KdfParams, Storage};
 /// use zeroize::Zeroizing;
 ///
 /// let storage = Storage::new("/path/to/keystore.db");
-/// let mut kn = Keynest::init_with_storage(Zeroizing::new("password"), storage).unwrap();
+/// let kdf = KdfParams::default();
+/// let mut kn = Keynest::init_with_storage_and_kdf(Zeroizing::new("password"), storage, kdf).unwrap();
 /// kn.set("key", "value").unwrap();
 /// kn.save().unwrap();
 /// ```
@@ -64,7 +67,7 @@ pub struct Keynest {
     store: Store,
     storage: Storage,
     key: [u8; 32],
-    header: Header,
+    keystore_file: KeystoreFile,
 }
 
 impl Drop for Keynest {
@@ -142,17 +145,16 @@ impl Keynest {
         let plaintext = Zeroizing::new(serde_json::to_vec(&store)?);
         let (ciphertext, nonce) = crypto::encrypt(&key, &plaintext)?;
 
-        let header = Header::new(kdf, salt, nonce)?;
-
-        let mut file = header.to_bytes();
-        file.extend_from_slice(&ciphertext);
+        let keystore_file =
+            KeystoreFile::new(kdf, salt.to_vec(), nonce.to_vec(), ciphertext.to_vec());
+        let file = serialize(&keystore_file)?;
         storage.save(&file)?;
 
         Ok(Self {
             store,
             storage,
             key,
-            header,
+            keystore_file,
         })
     }
 
@@ -183,13 +185,13 @@ impl Keynest {
         }
 
         let data = storage.load()?;
+        let keystore_file = parse(&data)?;
 
-        let (header, offset) = Header::from_bytes(&data)?;
-        let key = crypto::derive_key(&password, header.salt(), *header.kdf())
+        let key = crypto::derive_key(&password, keystore_file.salt(), *keystore_file.kdf())
             .context("unable to derive encryption key")?;
         drop(password);
 
-        let plaintext = crypto::decrypt(&key, header.nonce(), &data[offset..])?;
+        let plaintext = crypto::decrypt(&key, keystore_file.nonce(), keystore_file.ciphertext())?;
         let store = serde_json::from_slice(&plaintext)
             .context("failed to deserialize keystore; possibly wrong password or corrupted data")?;
 
@@ -197,7 +199,7 @@ impl Keynest {
             store,
             storage,
             key,
-            header,
+            keystore_file,
         })
     }
 
@@ -267,10 +269,13 @@ impl Keynest {
         let plaintext = Zeroizing::new(serde_json::to_vec(&self.store)?);
         let (ciphertext, nonce) = crypto::encrypt(&self.key, &plaintext)?;
 
-        self.header = Header::new(*self.header.kdf(), *self.header.salt(), nonce)?;
-
-        let mut file = self.header.to_bytes();
-        file.extend_from_slice(&ciphertext);
+        self.keystore_file = KeystoreFile::new(
+            *self.keystore_file.kdf(),
+            self.keystore_file.salt().to_vec(),
+            nonce.to_vec(),
+            ciphertext.to_vec(),
+        );
+        let file = serialize(&self.keystore_file)?;
         self.storage.save(&file)?;
         Ok(())
     }
@@ -290,10 +295,10 @@ impl Keynest {
             file_size: metadata.len(),
             creation_date: self.store.creation_date().to_string(),
             secrets_count: self.store.len(),
-            kdf: *self.header.kdf(),
+            kdf: *self.keystore_file.kdf(),
             algorithm: "ChaCha20-Poly1305",
-            nonce_len: self.header.nonce().len(),
-            version: self.header.version(),
+            nonce_len: self.keystore_file.nonce().len(),
+            version: self.keystore_file.version(),
         })
     }
 
@@ -324,10 +329,9 @@ impl Keynest {
         let plaintext = Zeroizing::new(serde_json::to_vec(&self.store)?);
         let (ciphertext, nonce) = crypto::encrypt(&new_key, &plaintext)?;
 
-        self.header = Header::new(new_kdf, new_salt, nonce)?;
-
-        let mut file = self.header.to_bytes();
-        file.extend_from_slice(&ciphertext);
+        self.keystore_file =
+            KeystoreFile::new(new_kdf, new_salt.to_vec(), nonce.to_vec(), ciphertext);
+        let file = serialize(&self.keystore_file)?;
         self.storage.save(&file)?;
 
         self.key.zeroize();
@@ -382,8 +386,8 @@ impl StoreInfo {
     }
 
     /// Returns the KDF parameters used for key derivation.
-    pub fn kdf(&self) -> KdfParams {
-        self.kdf
+    pub fn kdf(&self) -> &KdfParams {
+        &self.kdf
     }
 }
 
@@ -423,8 +427,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn encrypt_decrypt_with_header_roundtrip() {
+    fn encrypt_decrypt_roundtrip() {
         use crate::crypto::*;
+        use crate::format::{KeystoreFile, parse, serialize};
 
         let kdf = KdfParams::default();
         let salt = generate_salt().unwrap();
@@ -433,14 +438,13 @@ mod tests {
         let data = b"secret data".to_vec();
         let (ciphertext, nonce) = encrypt(&key, &data).unwrap();
 
-        let header = Header::new(kdf, salt, nonce).unwrap();
+        let keystore_file = KeystoreFile::new(kdf, salt.to_vec(), nonce.to_vec(), ciphertext);
+        let file = serialize(&keystore_file).unwrap();
 
-        let mut file = header.to_bytes();
-        file.extend_from_slice(&ciphertext);
-
-        let (parsed, offset) = Header::from_bytes(&file).unwrap();
-        let key2 = derive_key("pw", parsed.salt(), *parsed.kdf()).unwrap();
-        let plaintext = decrypt(&key2, parsed.nonce(), &file[offset..]).unwrap();
+        let keystore_file2 = parse(&file).unwrap();
+        let key2 = derive_key("pw", keystore_file2.salt(), *keystore_file2.kdf()).unwrap();
+        let plaintext =
+            decrypt(&key2, keystore_file2.nonce(), keystore_file2.ciphertext()).unwrap();
 
         assert_eq!(*plaintext, data);
     }
@@ -670,7 +674,10 @@ mod tests {
         // reopen mit neuem password
         let kn2 = Keynest::open_with_storage(Zeroizing::new("pw".to_string()), storage).unwrap();
 
-        assert_eq!(kn2.header.kdf().mem_cost_kib(), new_kdf.mem_cost_kib());
-        assert_eq!(kn2.header.kdf().time_cost(), new_kdf.time_cost());
+        assert_eq!(
+            kn2.keystore_file.kdf().mem_cost_kib(),
+            new_kdf.mem_cost_kib()
+        );
+        assert_eq!(kn2.keystore_file.kdf().time_cost(), new_kdf.time_cost());
     }
 }
