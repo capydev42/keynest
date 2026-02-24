@@ -107,14 +107,14 @@ mod tests {
         );
 
         let bytes = serialize(&file).unwrap();
-        let parsed = parse(&bytes).unwrap();
+        let keystore_file = parse(&bytes).unwrap();
 
-        assert_eq!(parsed.version(), VERSION_V1);
-        assert_eq!(parsed.kdf().mem_cost_kib(), 65536);
-        assert_eq!(parsed.kdf().time_cost(), 3);
-        assert_eq!(parsed.kdf().parallelism(), 2);
-        assert_eq!(parsed.salt(), file.salt());
-        assert_eq!(parsed.nonce(), file.nonce());
+        assert_eq!(keystore_file.version(), VERSION_V1);
+        assert_eq!(keystore_file.kdf().mem_cost_kib(), 65536);
+        assert_eq!(keystore_file.kdf().time_cost(), 3);
+        assert_eq!(keystore_file.kdf().parallelism(), 2);
+        assert_eq!(keystore_file.salt(), file.salt());
+        assert_eq!(keystore_file.nonce(), file.nonce());
     }
 
     #[test]
