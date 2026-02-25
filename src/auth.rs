@@ -1,5 +1,5 @@
 use anyhow::{Result, bail};
-use std::io::{self, BufRead, Read};
+use std::io::{self, BufRead, IsTerminal};
 use zeroize::Zeroizing;
 
 pub fn read_password() -> Result<Zeroizing<String>> {
@@ -14,9 +14,9 @@ pub fn read_password() -> Result<Zeroizing<String>> {
     //  stdin (Pipeline)
     //  echo "supersecret" | keynest get github_token
     //  printf "%s" "$KEYNEST_PASSWORD" | keynest get github_token
-    if !atty::is(atty::Stream::Stdin) {
+    if !io::stdin().is_terminal() {
         let mut buf = String::new();
-        io::stdin().read_to_string(&mut buf)?;
+        io::stdin().read_line(&mut buf)?;
         let pw = buf.trim_end().to_string();
 
         if !pw.is_empty() {
@@ -25,7 +25,7 @@ pub fn read_password() -> Result<Zeroizing<String>> {
     }
 
     //  Interaktiv (TTY)
-    if atty::is(atty::Stream::Stdin) {
+    if io::stdin().is_terminal() {
         let pw = rpassword::prompt_password("Password: ")?;
         if !pw.is_empty() {
             return Ok(Zeroizing::new(pw));
@@ -36,7 +36,7 @@ pub fn read_password() -> Result<Zeroizing<String>> {
 }
 
 pub fn read_new_password_with_confirmation() -> Result<Zeroizing<String>> {
-    if !atty::is(atty::Stream::Stdin) {
+    if !io::stdin().is_terminal() {
         let stdin = io::stdin();
         let mut handle = stdin.lock();
 
