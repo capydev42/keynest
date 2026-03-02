@@ -6,7 +6,9 @@ use anyhow::{Result, bail};
 
 use crate::KdfParams;
 
+pub mod tlv;
 pub mod v1;
+pub mod v2;
 
 /// Magic bytes identifying a keynest keystore file ("KNST").
 pub const MAGIC: &[u8; 4] = b"KNST";
@@ -15,12 +17,13 @@ pub const MAGIC_LEN: usize = 4;
 /// Length of version field.
 pub const VER_LEN: usize = 1;
 /// Latest format version
-pub const CURRENT_VERSION: u8 = v1::VERSION_V1;
+pub const CURRENT_VERSION: u8 = v2::VERSION_V2;
 
 /// Represents a parsed keystore file with all components.
 ///
 /// This struct holds the deserialized data from a keystore file,
 /// including version, KDF parameters, salt, nonce, and encrypted ciphertext.
+#[derive(Debug)]
 pub(crate) struct KeystoreFile {
     version: u8,
     kdf: KdfParams,
@@ -89,7 +92,8 @@ pub fn parse(data: &[u8]) -> Result<KeystoreFile> {
     let version = data[MAGIC_LEN];
 
     match version {
-        1 => v1::parse(data),
+        v1::VERSION_V1 => v1::parse(data),
+        v2::VERSION_V2 => v2::parse(data),
         _ => bail!("unsupported version"),
     }
 }
@@ -100,8 +104,5 @@ pub fn parse(data: &[u8]) -> Result<KeystoreFile> {
 ///
 /// Returns an error if the version is unsupported.
 pub fn serialize(file: &KeystoreFile) -> Result<Vec<u8>> {
-    match file.version() {
-        1 => v1::serialize(file),
-        _ => bail!("unsupported version"),
-    }
+    v2::serialize(file)
 }
