@@ -119,7 +119,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-keynest = "0.1"
+keynest = "0.2"
 ```
 
 ### Simple example (default storage location)

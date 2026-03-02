@@ -21,7 +21,7 @@ This document describes the cryptographic design used by Keynest to protect secr
 2. A cryptographic key is derived using Argon2id
 3. All secrets are serialized into a JSON structure
 4. The serialized data is encrypted with ChaCha20-Poly1305
-5. The encrypted blob is stored on disk with metadata header
+5. The encrypted blob is stored on disk using a versioned TLV format
 
 ---
 
@@ -69,22 +69,69 @@ Properties:
 
 ## On-disk Format
 
+The keystore uses a versioned TLV (Type-Length-Value) format for extensibility.
+
+### V2 Format (current)
+
 ```
-MAGIC (4) | VERSION (1) | MEM_COST (4) | TIME_COST (4) | PARALLELISM (4) | SALT (16) | NONCE (24) | CIPHERTEXT
+MAGIC (4) | VERSION (1) | TLV Entries...
 ```
 
-| Field | Size | Description |
-|-------|------|-------------|
-| MAGIC | 4 bytes | ASCII `KNST` |
-| VERSION | 1 byte | File format version (currently 1) |
-| MEM_COST | 4 bytes | Argon2 memory cost (KiB) |
-| TIME_COST | 4 bytes | Argon2 time cost (iterations) |
-| PARALLELISM | 4 bytes | Argon2 parallelism |
-| SALT | 16 bytes | Random salt for key derivation |
-| NONCE | 24 bytes | Random nonce for encryption |
-| CIPHERTEXT | variable | Authenticated encrypted data |
+#### File Header
 
-**Total header size:** 53 bytes
+| Offset | Size | Field | Description |
+|--------|------|-------|-------------|
+| 0 | 4 | MAGIC | `"KNST"` (0x4B4E5354) |
+| 4 | 1 | VERSION | Format version (2) |
+| 5+ | N | TLV Entries | Type-Length-Value encoded fields |
+
+#### TLV Entry Structure
+
+Each field encoded as:
+```
+TYPE (1) | LENGTH (2) | VALUE (N)
+```
+
+- **TYPE:** 1 byte identifier (little-endian)
+- **LENGTH:** 2 bytes (u16, little-endian) - maximum 65535 bytes
+- **VALUE:** N bytes of data
+
+#### TLV Type Identifiers
+
+| Type ID | Field | Value Format | Size |
+|---------|-------|--------------|------|
+| 1 | KDF | mem_cost(4) + time_cost(4) + parallelism(4) | 12 bytes |
+| 2 | Salt | Random salt bytes | 16 bytes |
+| 3 | Nonce | XChaCha20 nonce | 24 bytes |
+| 4 | Ciphertext | Encrypted JSON data | Variable |
+
+#### Example V2 File Layout
+
+```
+Offset 0:   4B 4E 53 54          [MAGIC: "KNST"]
+Offset 4:   02                   [VERSION: 2]
+Offset 5:   01                   [TYPE: KDF]
+Offset 6:   0C 00               [LENGTH: 12]
+Offset 8:   00 01 00 00 03 00 00 00 01 00 00 00  [KDF params]
+Offset 20:  02                   [TYPE: Salt]
+Offset 21:  10 00               [LENGTH: 16]
+Offset 23:   ... 16 bytes ...  [Salt]
+Offset 39:  03                   [TYPE: Nonce]
+Offset 40:  18 00               [LENGTH: 24]
+Offset 42:   ... 24 bytes ...  [Nonce]
+Offset 66:  04                   [TYPE: Ciphertext]
+Offset 67:  XX XX               [LENGTH: N]
+Offset 69:   ... N bytes ...   [Ciphertext]
+```
+
+#### TLV Design Rationale
+
+- **Extensible:** New field types can be added without breaking parsers (unknown types are ignored)
+- **Self-describing:** Length prefix prevents parsing errors
+- **Alignment:** Compact encoding with no padding overhead
+- **Forward compatible:** Unknown TLV types are silently ignored during parsing
+
+Older versions (v1) use a fixed binary format for backward compatibility.
 
 ---
 
@@ -155,6 +202,6 @@ Note: The salt is stored in the file format (KeystoreFile) which is persisted to
 | Salt | 16 bytes (random per keystore) |
 | Serialization | JSON (serde_json) |
 | Memory | zeroize crate for secure cleanup |
-| File Version | V1 |
+| File Version | V2 (TLV format) |
 
 This design prioritizes simplicity and modern, well-audited cryptographic primitives.

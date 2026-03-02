@@ -10,7 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- (nothing yet)
+- TLV (Type-Length-Value) v2 file format with extensibility support
+- Detailed TLV format documentation in CRYPTO.md
+
+### Changed
+- Removed unused v1 serialization code (v2 is the current format)
+- Improved code quality (cleaned up unused imports, fixed warnings)
+
+### Documentation
+- Updated CRYPTO.md with detailed TLV format specification
+- Added file header structure, TLV entry layout, and byte-level example
 
 ---
 
