@@ -6,7 +6,7 @@ use super::tlv;
 use super::{KeystoreFile, MAGIC, MAGIC_LEN, VER_LEN};
 use crate::{
     KdfParams,
-    crypto::{NONCE_LEN, SALT_LEN},
+    crypto::{Algorithm, NONCE_LEN, SALT_LEN},
 };
 use anyhow::{Result, bail};
 
@@ -19,6 +19,8 @@ pub const VERSION_V2: u8 = 2;
 pub(crate) enum TlvType {
     /// KDF parameters (memory, time, parallelism)
     Kdf,
+    /// Algorithm for encryption
+    Algorithm,
     /// Salt for key derivation
     Salt,
     /// Nonce for encryption
@@ -36,6 +38,7 @@ impl From<u8> for TlvType {
             2 => Self::Salt,
             3 => Self::Nonce,
             4 => Self::Ciphertext,
+            5 => Self::Algorithm,
             x => Self::Unknown(x),
         }
     }
@@ -48,6 +51,7 @@ impl From<TlvType> for u8 {
             TlvType::Salt => 2,
             TlvType::Nonce => 3,
             TlvType::Ciphertext => 4,
+            TlvType::Algorithm => 5,
             TlvType::Unknown(x) => x,
         }
     }
@@ -67,6 +71,7 @@ pub fn parse(data: &[u8]) -> Result<KeystoreFile> {
     let tlvs = tlv::decode_all(tlv_data)?;
 
     let mut kdf: Option<KdfParams> = None;
+    let mut algorithm: Option<Algorithm> = None;
     let mut salt: Option<Vec<u8>> = None;
     let mut nonce: Option<Vec<u8>> = None;
     let mut ciphertext: Option<Vec<u8>> = None;
@@ -83,6 +88,14 @@ pub fn parse(data: &[u8]) -> Result<KeystoreFile> {
                 let par = u32::from_le_bytes(t.value()[8..12].try_into()?);
 
                 kdf = Some(KdfParams::new(mem, time, par)?);
+            }
+            TlvType::Algorithm => {
+                if t.value().len() != 1 {
+                    bail!("invalid algorithm length");
+                }
+
+                let id = t.value()[0];
+                algorithm = Some(Algorithm::try_from(id)?);
             }
             TlvType::Salt => {
                 if t.value().len() != SALT_LEN {
@@ -108,6 +121,7 @@ pub fn parse(data: &[u8]) -> Result<KeystoreFile> {
 
     Ok(KeystoreFile::new(
         kdf.ok_or_else(|| anyhow::anyhow!("missing kdf"))?,
+        algorithm.ok_or_else(|| anyhow::anyhow!("missing algorithm"))?,
         salt.ok_or_else(|| anyhow::anyhow!("missing salt"))?,
         nonce.ok_or_else(|| anyhow::anyhow!("missing nonce"))?,
         ciphertext.ok_or_else(|| anyhow::anyhow!("missing ciphertext"))?,
@@ -136,7 +150,10 @@ pub fn serialize(file: &KeystoreFile) -> Result<Vec<u8>> {
     kdf_bytes.extend_from_slice(&file.kdf().time_cost().to_le_bytes());
     kdf_bytes.extend_from_slice(&file.kdf().parallelism().to_le_bytes());
 
+    let algo_id: u8 = file.algorithm().into();
+
     tlv::encode(TlvType::Kdf.into(), &kdf_bytes, &mut buf);
+    tlv::encode(TlvType::Algorithm.into(), &[algo_id], &mut buf);
     tlv::encode(TlvType::Salt.into(), file.salt(), &mut buf);
     tlv::encode(TlvType::Nonce.into(), file.nonce(), &mut buf);
     tlv::encode(TlvType::Ciphertext.into(), file.ciphertext(), &mut buf);
@@ -154,6 +171,7 @@ mod tests {
     fn v2_roundtrip() {
         let file = KeystoreFile::new(
             KdfParams::new(65536, 3, 2).unwrap(),
+            Algorithm::XChaCha20Poly1305,
             vec![1u8; 16],
             vec![2u8; 24],
             vec![3u8; 32],
@@ -170,6 +188,7 @@ mod tests {
         assert_eq!(parsed.kdf().mem_cost_kib(), 65536);
         assert_eq!(parsed.kdf().time_cost(), 3);
         assert_eq!(parsed.kdf().parallelism(), 2);
+        assert_eq!(parsed.algorithm(), Algorithm::XChaCha20Poly1305);
     }
 
     #[test]
@@ -187,6 +206,11 @@ mod tests {
         bytes.push(1); // type = Kdf
         bytes.extend_from_slice(&12u16.to_le_bytes());
         bytes.extend_from_slice(&kdf_data);
+
+        // Add Algorithm TLV (type 5)
+        bytes.push(5); // type = Algorithm
+        bytes.extend_from_slice(&1u16.to_le_bytes());
+        bytes.push(1); // XChaCha20Poly1305
 
         // Add unknown TLV type 99 with length 3
         bytes.push(99); // type
@@ -220,6 +244,11 @@ mod tests {
         bytes.extend_from_slice(MAGIC);
         bytes.push(VERSION_V2);
 
+        // Algorithm TLV (has algorithm, but missing kdf)
+        bytes.push(5); // type = Algorithm
+        bytes.extend_from_slice(&1u16.to_le_bytes());
+        bytes.push(1); // XChaCha20Poly1305
+
         // Salt TLV
         bytes.push(2); // type = Salt
         bytes.extend_from_slice(&16u16.to_le_bytes());
@@ -244,6 +273,7 @@ mod tests {
     fn v2_empty_ciphertext() {
         let file = KeystoreFile::new(
             KdfParams::default(),
+            Algorithm::XChaCha20Poly1305,
             vec![1u8; 16],
             vec![2u8; 24],
             vec![], // empty ciphertext
@@ -253,5 +283,85 @@ mod tests {
         let parsed = parse(&bytes).unwrap();
 
         assert!(parsed.ciphertext().is_empty());
+        assert_eq!(parsed.algorithm(), Algorithm::XChaCha20Poly1305);
+    }
+
+    #[test]
+    fn v2_missing_algorithm_fails() {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(MAGIC);
+        bytes.push(VERSION_V2);
+
+        // KDF TLV (valid params)
+        let mut kdf_data = vec![0u8; 12];
+        kdf_data[..4].copy_from_slice(&65536u32.to_le_bytes()); // mem = 64 MiB
+        kdf_data[4..8].copy_from_slice(&3u32.to_le_bytes()); // time = 3
+        kdf_data[8..12].copy_from_slice(&1u32.to_le_bytes()); // parallelism = 1
+        bytes.push(1);
+        bytes.extend_from_slice(&12u16.to_le_bytes());
+        bytes.extend_from_slice(&kdf_data);
+
+        // Salt TLV
+        bytes.push(2);
+        bytes.extend_from_slice(&16u16.to_le_bytes());
+        bytes.extend_from_slice(&[0u8; 16]);
+
+        // Nonce TLV
+        bytes.push(3);
+        bytes.extend_from_slice(&24u16.to_le_bytes());
+        bytes.extend_from_slice(&[0u8; 24]);
+
+        // Ciphertext TLV
+        bytes.push(4);
+        bytes.extend_from_slice(&5u16.to_le_bytes());
+        bytes.extend_from_slice(b"hello");
+
+        let result = parse(&bytes);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        eprintln!("Error: {}", err);
+        assert!(err.contains("algorithm"));
+    }
+
+    #[test]
+    fn v2_invalid_algorithm_fails() {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(MAGIC);
+        bytes.push(VERSION_V2);
+
+        // KDF TLV (valid params)
+        let mut kdf_data = vec![0u8; 12];
+        kdf_data[..4].copy_from_slice(&65536u32.to_le_bytes()); // mem = 64 MiB
+        kdf_data[4..8].copy_from_slice(&3u32.to_le_bytes()); // time = 3
+        kdf_data[8..12].copy_from_slice(&1u32.to_le_bytes()); // parallelism = 1
+        bytes.push(1);
+        bytes.extend_from_slice(&12u16.to_le_bytes());
+        bytes.extend_from_slice(&kdf_data);
+
+        // Algorithm TLV with invalid ID (99)
+        bytes.push(5);
+        bytes.extend_from_slice(&1u16.to_le_bytes());
+        bytes.push(99); // invalid algorithm
+
+        // Salt TLV
+        bytes.push(2);
+        bytes.extend_from_slice(&16u16.to_le_bytes());
+        bytes.extend_from_slice(&[0u8; 16]);
+
+        // Nonce TLV
+        bytes.push(3);
+        bytes.extend_from_slice(&24u16.to_le_bytes());
+        bytes.extend_from_slice(&[0u8; 24]);
+
+        // Ciphertext TLV
+        bytes.push(4);
+        bytes.extend_from_slice(&5u16.to_le_bytes());
+        bytes.extend_from_slice(b"hello");
+
+        let result = parse(&bytes);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        eprintln!("Error: {}", err);
+        assert!(err.contains("unsupported algorithm"));
     }
 }

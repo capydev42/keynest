@@ -11,7 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - TLV (Type-Length-Value) v2 file format with extensibility support
-- Detailed TLV format documentation in CRYPTO.md
+- Algorithm field (XChaCha20-Poly1305) to v2 TLV format for future algorithm flexibility
+- Unit tests for format parsing (invalid magic, unsupported version, missing/invalid algorithm)
 
 ### Changed
 - Removed unused v1 serialization code (v2 is the current format)
@@ -20,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 - Updated CRYPTO.md with detailed TLV format specification
 - Added file header structure, TLV entry layout, and byte-level example
+- Added documentation for Algorithm enum and password input functions
 
 ---
 
