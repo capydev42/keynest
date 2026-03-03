@@ -104,9 +104,28 @@ TYPE (1) | LENGTH (2) | VALUE (N)
 | 2 | Salt | Random salt bytes | 16 bytes |
 | 3 | Nonce | XChaCha20 nonce | 24 bytes |
 | 4 | Ciphertext | Encrypted JSON data | Variable |
+| 5 | Algorithm | Algorithm ID (1 = XChaCha20-Poly1305) | 1 byte |
 
 #### Example V2 File Layout
 
+```
+Offset 0:   4B 4E 53 54          [MAGIC: "KNST"]
+Offset 4:   02                   [VERSION: 2]
+Offset 5:   01                   [TYPE: KDF]
+Offset 6:   0C 00               [LENGTH: 12]
+Offset 8:   00 01 00 00 03 00 00 00 01 00 00 00  [KDF params]
+Offset 20:  05                   [TYPE: Algorithm]
+Offset 21:   01 00               [LENGTH: 1]
+Offset 23:   01                   [VALUE: 1 (XChaCha20-Poly1305)]
+Offset 24:  02                   [TYPE: Salt]
+Offset 25:   10 00               [LENGTH: 16]
+Offset 27:   ... 16 bytes ...  [Salt]
+Offset 43:  03                   [TYPE: Nonce]
+Offset 44:   18 00               [LENGTH: 24]
+Offset 46:   ... 24 bytes ...  [Nonce]
+Offset 70:  04                   [TYPE: Ciphertext]
+Offset 71:   XX XX               [LENGTH: N]
+Offset 73:   ... N bytes ...   [Ciphertext]
 ```
 Offset 0:   4B 4E 53 54          [MAGIC: "KNST"]
 Offset 4:   02                   [VERSION: 2]

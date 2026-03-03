@@ -5,6 +5,7 @@
 use anyhow::{Result, bail};
 
 use crate::KdfParams;
+use crate::crypto::Algorithm;
 
 pub mod tlv;
 pub mod v1;
@@ -27,6 +28,7 @@ pub const CURRENT_VERSION: u8 = v2::VERSION_V2;
 pub(crate) struct KeystoreFile {
     version: u8,
     kdf: KdfParams,
+    algorithm: Algorithm,
     salt: Vec<u8>,
     nonce: Vec<u8>,
     ciphertext: Vec<u8>,
@@ -34,9 +36,16 @@ pub(crate) struct KeystoreFile {
 
 impl KeystoreFile {
     /// Creates a new KeystoreFile from its components.
-    pub fn new(kdf: KdfParams, salt: Vec<u8>, nonce: Vec<u8>, ciphertext: Vec<u8>) -> Self {
+    pub fn new(
+        kdf: KdfParams,
+        algorithm: Algorithm,
+        salt: Vec<u8>,
+        nonce: Vec<u8>,
+        ciphertext: Vec<u8>,
+    ) -> Self {
         Self {
             version: CURRENT_VERSION,
+            algorithm,
             kdf,
             salt,
             nonce,
@@ -52,6 +61,11 @@ impl KeystoreFile {
     /// Returns the KDF parameters used for key derivation.
     pub fn kdf(&self) -> &KdfParams {
         &self.kdf
+    }
+
+    /// Returns the algorithm used for encryption.
+    pub fn algorithm(&self) -> Algorithm {
+        self.algorithm
     }
 
     /// Returns the salt used for key derivation.
@@ -105,4 +119,35 @@ pub fn parse(data: &[u8]) -> Result<KeystoreFile> {
 /// Returns an error if the version is unsupported.
 pub fn serialize(file: &KeystoreFile) -> Result<Vec<u8>> {
     v2::serialize(file)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_invalid_magic_fails() {
+        let mut data = vec![0u8; 10];
+        data[..4].copy_from_slice(b"FAIL"); // invalid magic
+
+        let result = parse(&data);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("invalid magic"));
+    }
+
+    #[test]
+    fn parse_unsupported_version_fails() {
+        let mut data = vec![0u8; 10];
+        data[..4].copy_from_slice(b"KNST"); // valid magic
+        data[4] = 99; // unsupported version
+
+        let result = parse(&data);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("unsupported version")
+        );
+    }
 }

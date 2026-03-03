@@ -1,7 +1,21 @@
+//! Password input handling.
+//!
+//! Supports multiple input methods: environment variable, stdin, and interactive prompt.
+
 use anyhow::{Result, bail};
 use std::io::{self, BufRead, IsTerminal};
 use zeroize::Zeroizing;
 
+/// Reads the master password from the user.
+///
+/// Checks in order:
+/// 1. `KEYNEST_PASSWORD` environment variable
+/// 2. stdin (non-interactive)
+/// 3. Terminal prompt (interactive)
+///
+/// # Errors
+///
+/// Returns an error if no password is provided.
 pub fn read_password() -> Result<Zeroizing<String>> {
     //  Environment Variable
     //  KEYNEST_PASSWORD="supersecret" keynest get github_token
@@ -35,6 +49,14 @@ pub fn read_password() -> Result<Zeroizing<String>> {
     bail!("No password provided")
 }
 
+/// Reads a new password with confirmation.
+///
+/// Used when creating or rekeying a keystore. Prompts for password twice
+/// and ensures they match.
+///
+/// # Errors
+///
+/// Returns an error if passwords don't match or are empty.
 pub fn read_new_password_with_confirmation() -> Result<Zeroizing<String>> {
     if !io::stdin().is_terminal() {
         let stdin = io::stdin();

@@ -145,8 +145,13 @@ impl Keynest {
         let plaintext = Zeroizing::new(serde_json::to_vec(&store)?);
         let (ciphertext, nonce) = crypto::encrypt(&key, &plaintext)?;
 
-        let keystore_file =
-            KeystoreFile::new(kdf, salt.to_vec(), nonce.to_vec(), ciphertext.to_vec());
+        let keystore_file = KeystoreFile::new(
+            kdf,
+            crypto::Algorithm::XChaCha20Poly1305,
+            salt.to_vec(),
+            nonce.to_vec(),
+            ciphertext.to_vec(),
+        );
         let file = serialize(&keystore_file)?;
         storage.save(&file)?;
 
@@ -271,6 +276,7 @@ impl Keynest {
 
         self.keystore_file = KeystoreFile::new(
             *self.keystore_file.kdf(),
+            self.keystore_file.algorithm(),
             self.keystore_file.salt().to_vec(),
             nonce.to_vec(),
             ciphertext.to_vec(),
@@ -329,8 +335,13 @@ impl Keynest {
         let plaintext = Zeroizing::new(serde_json::to_vec(&self.store)?);
         let (ciphertext, nonce) = crypto::encrypt(&new_key, &plaintext)?;
 
-        self.keystore_file =
-            KeystoreFile::new(new_kdf, new_salt.to_vec(), nonce.to_vec(), ciphertext);
+        self.keystore_file = KeystoreFile::new(
+            new_kdf,
+            crypto::Algorithm::XChaCha20Poly1305,
+            new_salt.to_vec(),
+            nonce.to_vec(),
+            ciphertext,
+        );
         let file = serialize(&self.keystore_file)?;
         self.storage.save(&file)?;
 
@@ -438,7 +449,13 @@ mod tests {
         let data = b"secret data".to_vec();
         let (ciphertext, nonce) = encrypt(&key, &data).unwrap();
 
-        let keystore_file = KeystoreFile::new(kdf, salt.to_vec(), nonce.to_vec(), ciphertext);
+        let keystore_file = KeystoreFile::new(
+            kdf,
+            Algorithm::XChaCha20Poly1305,
+            salt.to_vec(),
+            nonce.to_vec(),
+            ciphertext,
+        );
         let file = serialize(&keystore_file).unwrap();
 
         let keystore_file2 = parse(&file).unwrap();
