@@ -106,7 +106,7 @@ pub fn derive_key(password: &str, salt: &[u8], kdf: KdfParams) -> Result<[u8; KE
     let mut key = [0u8; KEY_LEN];
     argon2
         .hash_password_into(password.as_bytes(), salt, &mut key)
-        .map_err(|e| anyhow::anyhow!("argon2 key derivation failed {e}"))?;
+        .map_err(|e| anyhow::anyhow!("argon2 key derivation failed: {e}"))?;
 
     Ok(key)
 }

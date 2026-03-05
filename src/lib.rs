@@ -32,7 +32,7 @@ mod format;
 mod storage;
 mod store;
 
-pub use crate::crypto::KdfParams;
+pub use crate::crypto::{KdfParams, algorithm::Algorithm};
 use crate::format::{KeystoreFile, parse, serialize};
 pub use crate::storage::Storage;
 use crate::store::SecretEntry;
@@ -139,15 +139,16 @@ impl Keynest {
         let salt = crypto::generate_salt()?;
         let key =
             crypto::derive_key(&password, &salt, kdf).context("failed to derive encryption key")?;
+        let algorithm = Algorithm::XChaCha20Poly1305;
 
         drop(password);
 
         let plaintext = Zeroizing::new(serde_json::to_vec(&store)?);
-        let (ciphertext, nonce) = crypto::encrypt(&key, &plaintext)?;
+        let (ciphertext, nonce) = algorithm.encrypt(&key, &plaintext)?;
 
         let keystore_file = KeystoreFile::new(
             kdf,
-            crypto::Algorithm::XChaCha20Poly1305,
+            algorithm,
             salt.to_vec(),
             nonce.to_vec(),
             ciphertext.to_vec(),
@@ -196,7 +197,11 @@ impl Keynest {
             .context("unable to derive encryption key")?;
         drop(password);
 
-        let plaintext = crypto::decrypt(&key, keystore_file.nonce(), keystore_file.ciphertext())?;
+        let plaintext = keystore_file.algorithm().decrypt(
+            &key,
+            keystore_file.nonce(),
+            keystore_file.ciphertext(),
+        )?;
         let store = serde_json::from_slice(&plaintext)
             .context("failed to deserialize keystore; possibly wrong password or corrupted data")?;
 
@@ -272,7 +277,10 @@ impl Keynest {
     /// Returns an error if writing to storage fails.
     pub fn save(&mut self) -> Result<()> {
         let plaintext = Zeroizing::new(serde_json::to_vec(&self.store)?);
-        let (ciphertext, nonce) = crypto::encrypt(&self.key, &plaintext)?;
+        let (ciphertext, nonce) = self
+            .keystore_file
+            .algorithm()
+            .encrypt(&self.key, &plaintext)?;
 
         self.keystore_file = KeystoreFile::new(
             *self.keystore_file.kdf(),
@@ -302,7 +310,7 @@ impl Keynest {
             creation_date: self.store.creation_date().to_string(),
             secrets_count: self.store.len(),
             kdf: *self.keystore_file.kdf(),
-            algorithm: "ChaCha20-Poly1305",
+            algorithm: self.keystore_file.algorithm().name(),
             nonce_len: self.keystore_file.nonce().len(),
             version: self.keystore_file.version(),
         })
@@ -325,19 +333,30 @@ impl Keynest {
     /// - Encryption fails
     /// - Writing to storage fails
     pub fn rekey(&mut self, new_password: Zeroizing<String>, new_kdf: KdfParams) -> Result<()> {
+        let current_algorithm = self.keystore_file.algorithm();
+
+        self.rekey_with_algorithm(new_password, new_kdf, current_algorithm)
+    }
+
+    fn rekey_with_algorithm(
+        &mut self,
+        new_password: Zeroizing<String>,
+        new_kdf: KdfParams,
+        new_algorithm: Algorithm,
+    ) -> Result<()> {
         let new_salt = crypto::generate_salt()?;
 
         let new_key = crypto::derive_key(&new_password, &new_salt, new_kdf)
-            .context("failed to derive new enryption key")?;
+            .context("failed to derive new encryption key")?;
 
         drop(new_password);
 
         let plaintext = Zeroizing::new(serde_json::to_vec(&self.store)?);
-        let (ciphertext, nonce) = crypto::encrypt(&new_key, &plaintext)?;
+        let (ciphertext, nonce) = new_algorithm.encrypt(&new_key, &plaintext)?;
 
         self.keystore_file = KeystoreFile::new(
             new_kdf,
-            crypto::Algorithm::XChaCha20Poly1305,
+            new_algorithm,
             new_salt.to_vec(),
             nonce.to_vec(),
             ciphertext,
@@ -445,23 +464,26 @@ mod tests {
         let kdf = KdfParams::default();
         let salt = generate_salt().unwrap();
         let key = derive_key("pw", &salt, kdf).unwrap();
+        let algorithm = Algorithm::XChaCha20Poly1305;
 
         let data = b"secret data".to_vec();
-        let (ciphertext, nonce) = encrypt(&key, &data).unwrap();
+        let (ciphertext, nonce) = algorithm.encrypt(&key, &data).unwrap();
 
         let keystore_file = KeystoreFile::new(
             kdf,
             Algorithm::XChaCha20Poly1305,
             salt.to_vec(),
-            nonce.to_vec(),
+            nonce,
             ciphertext,
         );
         let file = serialize(&keystore_file).unwrap();
 
         let keystore_file2 = parse(&file).unwrap();
         let key2 = derive_key("pw", keystore_file2.salt(), *keystore_file2.kdf()).unwrap();
-        let plaintext =
-            decrypt(&key2, keystore_file2.nonce(), keystore_file2.ciphertext()).unwrap();
+        let plaintext = keystore_file2
+            .algorithm()
+            .decrypt(&key2, keystore_file2.nonce(), keystore_file2.ciphertext())
+            .unwrap();
 
         assert_eq!(*plaintext, data);
     }

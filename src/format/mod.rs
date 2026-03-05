@@ -5,7 +5,7 @@
 use anyhow::{Result, bail};
 
 use crate::KdfParams;
-use crate::crypto::Algorithm;
+use crate::crypto::algorithm::Algorithm;
 
 pub mod tlv;
 pub mod v1;

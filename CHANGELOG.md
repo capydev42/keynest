@@ -12,9 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - TLV (Type-Length-Value) v2 file format with extensibility support
 - Algorithm field (XChaCha20-Poly1305) to v2 TLV format for future algorithm flexibility
+- Algorithm dispatch system for runtime algorithm selection
 - Unit tests for format parsing (invalid magic, unsupported version, missing/invalid algorithm)
 
 ### Changed
+- Refactored crypto module: split into `algorithm.rs` (dispatch) and `chacha20poly1305.rs` (implementation)
 - Removed unused v1 serialization code (v2 is the current format)
 - Improved code quality (cleaned up unused imports, fixed warnings)
 
@@ -22,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated CRYPTO.md with detailed TLV format specification
 - Added file header structure, TLV entry layout, and byte-level example
 - Added documentation for Algorithm enum and password input functions
+- Added Algorithm Dispatch section explaining the extensible design
 
 ---
 

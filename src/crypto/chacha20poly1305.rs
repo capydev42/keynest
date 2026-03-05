@@ -1,6 +1,8 @@
 //! Authenticated encryption using XChaCha20-Poly1305.
 
-use super::{NONCE_LEN, SALT_LEN};
+use crate::crypto::KEY_LEN;
+
+use super::SALT_LEN;
 use anyhow::{Result, anyhow};
 use chacha20poly1305::{
     Key, XChaCha20Poly1305, XNonce,
@@ -8,6 +10,9 @@ use chacha20poly1305::{
 };
 use getrandom::fill;
 use zeroize::Zeroizing;
+
+/// Length of the nonce (24 bytes for XChaCha20-Poly1305).
+pub const NONCE_LEN: usize = 24;
 
 /// Fills buffer with cryptographically secure random bytes.
 fn secure_random(buf: &mut [u8]) -> Result<()> {
@@ -26,10 +31,14 @@ pub fn generate_salt() -> Result<[u8; SALT_LEN]> {
 /// # Errors
 ///
 /// Returns an error if random number generation fails.
-pub fn encrypt(key: &[u8], plaintext: &[u8]) -> Result<(Vec<u8>, [u8; NONCE_LEN])> {
+pub fn encrypt(key: &[u8], plaintext: &[u8]) -> Result<(Vec<u8>, Vec<u8>)> {
+    if key.len() != KEY_LEN {
+        return Err(anyhow!("invalid key length"));
+    }
+
     let cipher = XChaCha20Poly1305::new(Key::from_slice(key));
 
-    let mut nonce = [0u8; NONCE_LEN];
+    let mut nonce = vec![0u8; NONCE_LEN];
     secure_random(&mut nonce)?;
 
     let ciphertext = cipher
@@ -50,6 +59,14 @@ pub fn encrypt(key: &[u8], plaintext: &[u8]) -> Result<(Vec<u8>, [u8; NONCE_LEN]
 /// - The ciphertext has been tampered with
 /// - The data is corrupted
 pub fn decrypt(key: &[u8], nonce: &[u8], ciphertext: &[u8]) -> Result<Zeroizing<Vec<u8>>> {
+    if key.len() != KEY_LEN {
+        return Err(anyhow!("invalid key length"));
+    }
+
+    if nonce.len() != NONCE_LEN {
+        return Err(anyhow!("invalid nonce length"));
+    }
+
     let cipher = XChaCha20Poly1305::new(Key::from_slice(key));
 
     let plaintext = cipher
