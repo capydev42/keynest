@@ -6,7 +6,7 @@ use super::tlv;
 use super::{KeystoreFile, MAGIC, MAGIC_LEN, VER_LEN};
 use crate::{
     KdfParams,
-    crypto::{Algorithm, NONCE_LEN, SALT_LEN},
+    crypto::{SALT_LEN, algorithm::Algorithm},
 };
 use anyhow::{Result, bail};
 
@@ -98,15 +98,9 @@ pub fn parse(data: &[u8]) -> Result<KeystoreFile> {
                 algorithm = Some(Algorithm::try_from(id)?);
             }
             TlvType::Salt => {
-                if t.value().len() != SALT_LEN {
-                    bail!("invalid salt length");
-                }
                 salt = Some(t.value().to_vec());
             }
             TlvType::Nonce => {
-                if t.value().len() != NONCE_LEN {
-                    bail!("invalid nonce length");
-                }
                 nonce = Some(t.value().to_vec());
             }
             TlvType::Ciphertext => {
@@ -119,13 +113,21 @@ pub fn parse(data: &[u8]) -> Result<KeystoreFile> {
         }
     }
 
-    Ok(KeystoreFile::new(
-        kdf.ok_or_else(|| anyhow::anyhow!("missing kdf"))?,
-        algorithm.ok_or_else(|| anyhow::anyhow!("missing algorithm"))?,
-        salt.ok_or_else(|| anyhow::anyhow!("missing salt"))?,
-        nonce.ok_or_else(|| anyhow::anyhow!("missing nonce"))?,
-        ciphertext.ok_or_else(|| anyhow::anyhow!("missing ciphertext"))?,
-    ))
+    let kdf = kdf.ok_or_else(|| anyhow::anyhow!("missing kdf"))?;
+    let algorithm = algorithm.ok_or_else(|| anyhow::anyhow!("missing algorithm"))?;
+    let salt = salt.ok_or_else(|| anyhow::anyhow!("missing salt"))?;
+    let nonce = nonce.ok_or_else(|| anyhow::anyhow!("missing nonce"))?;
+    let ciphertext = ciphertext.ok_or_else(|| anyhow::anyhow!("missing ciphertext"))?;
+
+    if salt.len() != SALT_LEN {
+        bail!("invalid salt length");
+    }
+
+    if nonce.len() != algorithm.nonce_len() {
+        bail!("invalid nonce length for algorithm");
+    }
+
+    Ok(KeystoreFile::new(kdf, algorithm, salt, nonce, ciphertext))
 }
 
 /// Serializes a KeystoreFile to v2 format bytes using TLV encoding.

@@ -8,7 +8,7 @@
 use super::KeystoreFile;
 use crate::{
     KdfParams,
-    crypto::{NONCE_LEN, SALT_LEN},
+    crypto::{SALT_LEN, algorithm::Algorithm},
     format::{MAGIC_LEN, VER_LEN},
 };
 use anyhow::{Result, bail};
@@ -19,7 +19,7 @@ pub const VERSION_V1: u8 = 1;
 const MEM_LEN: usize = 4;
 const TIME_LEN: usize = 4;
 const PAR_LEN: usize = 4;
-
+const NONCE_LEN: usize = crate::crypto::chacha20poly1305::NONCE_LEN;
 const HEADER_LEN: usize = MAGIC_LEN + VER_LEN + MEM_LEN + TIME_LEN + PAR_LEN + SALT_LEN + NONCE_LEN;
 
 /// Parses a v1 keystore file.
@@ -55,7 +55,7 @@ pub fn parse(data: &[u8]) -> Result<KeystoreFile> {
 
     Ok(KeystoreFile::new(
         kdf,
-        crate::crypto::Algorithm::XChaCha20Poly1305,
+        Algorithm::XChaCha20Poly1305,
         salt,
         nonce,
         ciphertext,
