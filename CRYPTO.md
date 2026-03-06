@@ -185,6 +185,33 @@ Note: The salt is stored in the file format (KeystoreFile) which is persisted to
 
 ---
 
+## File Permissions
+
+Keynest hardens file permissions to prevent unauthorized access:
+
+| File Type | Permissions | Description |
+|-----------|-------------|-------------|
+| Keystore file | 0o600 | Owner read/write only |
+| Directory | 0o700 | Owner only (rwx------) |
+
+### Security Features
+
+- **Permission enforcement:** Files are created with 0o600 (rw-------)
+- **Directory hardening:** Parent directories created with 0o700
+- **Auto-repair:** Existing files with overly permissive access are automatically fixed
+- **Symlink protection:** Validates that the keystore path is not a symlink to prevent attacks
+- **Unix-only:** Currently implemented for Unix-like systems (Linux, macOS)
+
+### Implementation
+
+The storage layer automatically:
+1. Sets temp file permissions to 0o600 before writing
+2. Atomically replaces the old file with the new one
+3. Validates file/directory permissions on load
+4. Fixes any overly permissive permissions
+
+---
+
 ## Error Handling
 
 - Decryption errors return: `"Invalid password or corrupted data"`

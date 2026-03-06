@@ -14,11 +14,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Algorithm field (XChaCha20-Poly1305) to v2 TLV format for future algorithm flexibility
 - Algorithm dispatch system for runtime algorithm selection
 - Unit tests for format parsing (invalid magic, unsupported version, missing/invalid algorithm)
+- File permission hardening (0o600 for keystore, 0o700 for directories)
+- Symlink attack protection
 
 ### Changed
 - Refactored crypto module: split into `algorithm.rs` (dispatch) and `chacha20poly1305.rs` (implementation)
 - Removed unused v1 serialization code (v2 is the current format)
 - Improved code quality (cleaned up unused imports, fixed warnings)
+
+### Security
+- File permissions set to 0600 (owner read/write only)
+- Directory permissions set to 0700 (owner only)
+- Auto-repair of overly permissive existing files
+- Symlink validation to prevent attacks
 
 ### Documentation
 - Updated CRYPTO.md with detailed TLV format specification

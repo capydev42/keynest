@@ -9,6 +9,9 @@ use std::path::{Path, PathBuf};
 #[cfg(not(target_os = "windows"))]
 use std::fs::File;
 
+#[cfg(unix)]
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
+
 /// A storage backend for persisting keystore data.
 ///
 /// `Storage` handles reading and writing encrypted keystore files
@@ -35,6 +38,9 @@ impl Storage {
     ///
     /// Returns an error if the file cannot be read.
     pub fn load(&self) -> Result<Vec<u8>> {
+        #[cfg(unix)]
+        self.security_check()?;
+
         Ok(fs::read(&self.path)?)
     }
 
@@ -57,6 +63,9 @@ impl Storage {
     pub fn save(&self, data: &[u8]) -> Result<()> {
         if let Some(parent) = self.path.parent() {
             fs::create_dir_all(parent)?;
+
+            #[cfg(unix)]
+            self.ensure_dir_permissions(parent)?;
         }
 
         let tmp_path = self.random_tmp_path()?;
@@ -68,6 +77,12 @@ impl Storage {
                 .create_new(true)
                 .open(&tmp_path)
                 .context("failed to create temporary file")?;
+
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                tmp_file.set_permissions(fs::Permissions::from_mode(0o600))?;
+            }
 
             // write data
             tmp_file.write_all(data)?;
@@ -175,7 +190,77 @@ impl Storage {
     /// On Unix, `rename()` is atomic when both paths are on the same filesystem.
     #[cfg(not(target_os = "windows"))]
     fn atomic_replace(&self, tmp_path: &Path) -> Result<()> {
-        fs::rename(tmp_path, &self.path)?;
+        fs::rename(tmp_path, &self.path).context("atomic rename failed")?;
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    fn security_check(&self) -> Result<()> {
+        let meta = fs::symlink_metadata(&self.path)?;
+
+        // symlink protection
+        if meta.file_type().is_symlink() {
+            return Err(anyhow!("keystore path must not be a symlink"));
+        }
+
+        // file permission check
+        let mode = meta.mode() & 0o777;
+
+        if mode & 0o077 != 0 {
+            eprintln!(
+                "Warning: keynest store permissions too open ({:o}). Fixing to 600.",
+                mode
+            );
+
+            let mut perms = meta.permissions();
+            perms.set_mode(0o600);
+            fs::set_permissions(&self.path, perms)?;
+        }
+
+        // directory permission check
+        if let Some(parent) = self.path.parent() {
+            self.check_dir_permissions(parent)?;
+        }
+
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    fn check_dir_permissions(&self, dir: &Path) -> Result<()> {
+        let meta = fs::symlink_metadata(dir)?;
+
+        if meta.file_type().is_symlink() {
+            return Err(anyhow!("directory must not be a symlink"));
+        }
+
+        let mode = meta.mode() & 0o777;
+
+        if mode & 0o077 != 0 {
+            eprintln!(
+                "Warning: keynest directory permissions too open ({:o}). Recommended 700",
+                mode
+            );
+        }
+
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    fn ensure_dir_permissions(&self, dir: &Path) -> Result<()> {
+        let meta = fs::symlink_metadata(dir)?;
+
+        if meta.file_type().is_symlink() {
+            return Err(anyhow!("directory must not be a symlink"));
+        }
+
+        let mode = meta.mode() & 0o777;
+
+        if mode & 0o077 != 0 {
+            let mut perms = meta.permissions();
+            perms.set_mode(0o700);
+            fs::set_permissions(dir, perms)?;
+        }
+
         Ok(())
     }
 }
@@ -338,5 +423,22 @@ mod tests {
         storage.save(b"data").unwrap();
 
         assert!(nested.exists());
+    }
+
+    #[test]
+    fn save_sets_file_permissions_0600() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("store.db");
+
+        let storage = Storage::new(path.clone());
+        storage.save(b"data").unwrap();
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let meta = std::fs::metadata(&path).unwrap();
+            let mode = meta.permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600, "file should be 0600");
+        }
     }
 }
