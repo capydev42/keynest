@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
+## [0.3.0] - 2026-03-07
 
 ### Added
 - TLV (Type-Length-Value) v2 file format with extensibility support
@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added file header structure, TLV entry layout, and byte-level example
 - Added documentation for Algorithm enum and password input functions
 - Added Algorithm Dispatch section explaining the extensible design
+- Added File Permissions section to CRYPTO.md
 
 ---
 
