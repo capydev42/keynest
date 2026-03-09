@@ -12,6 +12,7 @@ use anyhow::{Result, bail};
 
 /// V2 file format version.
 pub const VERSION_V2: u8 = 2;
+const AEAD_TAG_LEN: usize = 16;
 
 /// TLV type identifiers for v2 format.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -79,6 +80,9 @@ pub fn parse(data: &[u8]) -> Result<KeystoreFile> {
     for t in tlvs {
         match TlvType::from(t.ty()) {
             TlvType::Kdf => {
+                if kdf.is_some() {
+                    bail!("duplicate KDF field");
+                }
                 if t.value().len() != 12 {
                     bail!("invalid kdf tlv length");
                 }
@@ -90,6 +94,10 @@ pub fn parse(data: &[u8]) -> Result<KeystoreFile> {
                 kdf = Some(KdfParams::new(mem, time, par)?);
             }
             TlvType::Algorithm => {
+                if algorithm.is_some(){
+                    bail!("duplicate algorithm field");
+                }
+
                 if t.value().len() != 1 {
                     bail!("invalid algorithm length");
                 }
@@ -98,12 +106,21 @@ pub fn parse(data: &[u8]) -> Result<KeystoreFile> {
                 algorithm = Some(Algorithm::try_from(id)?);
             }
             TlvType::Salt => {
+                if salt.is_some() {
+                    bail!("duplicate salt field");
+                }
                 salt = Some(t.value().to_vec());
             }
             TlvType::Nonce => {
+                if nonce.is_some() {
+                    bail!("duplicate nonce field");
+                }
                 nonce = Some(t.value().to_vec());
             }
             TlvType::Ciphertext => {
+                if ciphertext.is_some() {
+                    bail!("duplicate ciphertext field");
+                }
                 ciphertext = Some(t.value().to_vec());
             }
             TlvType::Unknown(_) => {
@@ -125,6 +142,10 @@ pub fn parse(data: &[u8]) -> Result<KeystoreFile> {
 
     if nonce.len() != algorithm.nonce_len() {
         bail!("invalid nonce length for algorithm");
+    }
+
+    if ciphertext.len() < AEAD_TAG_LEN {
+        bail!("ciphertext too short");
     }
 
     Ok(KeystoreFile::new(kdf, algorithm, salt, nonce, ciphertext))
