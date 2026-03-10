@@ -91,6 +91,8 @@ keynest rekey --argon-mem 131072  # upgrade memory cost
 | `info` | Show keystore information (KDF params, creation date) |
 | `rekey` | Change password and/or KDF parameters |
 
+All commands support `--json` for structured output (get, list, info).
+
 ---
 
 ## Features
@@ -102,6 +104,7 @@ keynest rekey --argon-mem 131072  # upgrade memory cost
 
 ### CLI Options
 - `--store <path>` - Specify custom keystore location
+- `--json` - Output in JSON format (for get, list, info commands)
 
 ### KDF Options (for init/rekey)
 - `--argon-mem <kb>` - Memory cost in KiB (default: 65536)

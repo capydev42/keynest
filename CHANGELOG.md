@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Remove panic on save failure in remove command
 - Show file path in "keystore already exists" and "keystore does not exist" errors
 - Show human-readable file size in info command (e.g., "18.0 KB")
+- Add `--json` flag for get, list, and info commands
 
 ### Documentation
 - Added AAD section to CRYPTO.md

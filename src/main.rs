@@ -2,7 +2,17 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 mod auth;
 use keynest::{KdfParams, Keynest, Storage, default_storage};
+use serde::Serialize;
+use std::fmt::Display;
 use std::path::PathBuf;
+
+fn print_json<T: Serialize>(value: &T) {
+    println!("{}", serde_json::to_string_pretty(value).unwrap());
+}
+
+fn print_plain<T: Display>(value: &T) {
+    println!("{value}");
+}
 
 #[derive(Debug, clap::Args)]
 struct Argon2Args {
@@ -45,9 +55,13 @@ fn resolve_storage(path: Option<PathBuf>) -> Result<Storage> {
     about = "Simple, offline, cross-platform secrets manager written in Rust."
 )]
 struct Cli {
-    ///Path to the keynest storage file
+    /// Path to the keynest storage file
     #[arg(long, global = true, value_name = "PATH", env = "KEYNEST_PATH")]
     store: Option<PathBuf>,
+
+    /// Output as JSON
+    #[arg(long, global = true)]
+    json: bool,
 
     #[command(subcommand)]
     command: Commands,
@@ -149,7 +163,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let storage = resolve_storage(args.store.clone())?;
             let kn = Keynest::open_with_storage(password, storage)?;
             match kn.get(&key) {
-                Some(secret) => println!("{secret}"),
+                Some(secret) => {
+                    if args.json {
+                        print_json(&serde_json::json!({"key": key, "value": secret}));
+                    } else {
+                        print_plain(&secret);
+                    }
+                }
                 None => {
                     eprintln!("key not found: {key}");
                     std::process::exit(1);
@@ -159,7 +179,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::List { all } => {
             let storage = resolve_storage(args.store.clone())?;
             let kn = Keynest::open_with_storage(password, storage)?;
-            if all {
+
+            if args.json {
+                if all {
+                    let entries: Vec<_> = kn
+                        .list_all()
+                        .iter()
+                        .map(|e| {
+                            serde_json::json!({
+                                "key": e.key(),
+                                "updated": e.updated()
+                            })
+                        })
+                        .collect();
+                    print_json(&entries);
+                } else {
+                    let keys: Vec<&str> = kn.list().iter().map(|s| s.as_str()).collect();
+                    print_json(&keys);
+                }
+            } else if all {
                 let entries = kn.list_all();
 
                 if entries.is_empty() {
@@ -204,7 +242,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let storage = resolve_storage(args.store.clone())?;
             let kn = Keynest::open_with_storage(password, storage.clone())?;
             let info = kn.info()?;
-            println!("{info}");
+
+            if args.json {
+                println!("{}", serde_json::to_string(&info)?);
+            } else {
+                println!("{info}");
+            }
         }
         Commands::Rekey { argon2 } => {
             let storage = resolve_storage(args.store.clone())?;

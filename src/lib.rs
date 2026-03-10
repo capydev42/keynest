@@ -38,6 +38,7 @@ pub use crate::storage::Storage;
 use crate::store::SecretEntry;
 use anyhow::{Context, Result, bail};
 use directories::ProjectDirs;
+use serde::Serialize;
 use std::path::PathBuf;
 use store::Store;
 use zeroize::{Zeroize, Zeroizing};
@@ -394,6 +395,7 @@ pub fn default_storage() -> Result<Storage> {
 /// Information about a keystore.
 ///
 /// Returned by [`Keynest::info`].
+#[derive(Serialize)]
 pub struct StoreInfo {
     path: PathBuf,
     file_size: u64,
@@ -419,6 +421,31 @@ impl StoreInfo {
     /// Returns the KDF parameters used for key derivation.
     pub fn kdf(&self) -> &KdfParams {
         &self.kdf
+    }
+
+    /// Returns the encryption algorithm.
+    pub fn algorithm(&self) -> &'static str {
+        self.algorithm
+    }
+
+    /// Returns the nonce length in bytes.
+    pub fn nonce_len(&self) -> usize {
+        self.nonce_len
+    }
+
+    /// Returns the format version.
+    pub fn version(&self) -> u8 {
+        self.version
+    }
+
+    /// Returns the file size in bytes.
+    pub fn file_size(&self) -> u64 {
+        self.file_size
+    }
+
+    /// Returns the file path.
+    pub fn path(&self) -> &PathBuf {
+        &self.path
     }
 }
 
