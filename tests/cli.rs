@@ -390,3 +390,63 @@ fn rekey_fails_if_password_confirmation_mismatch() {
         .assert()
         .failure();
 }
+
+#[test]
+fn set_with_file() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+    let secret_file = dir.path().join("secret.txt");
+
+    std::fs::write(&secret_file, "secret_from_file").unwrap();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["set", "mykey", "--file"])
+        .arg(&secret_file)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("stored secret"));
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["get", "mykey"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("secret_from_file"));
+}
+
+#[test]
+fn set_missing_value_fails() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    // Missing value without --prompt or --file should fail
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["set", "mykey"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("secret value required"));
+}

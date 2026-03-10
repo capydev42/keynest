@@ -68,8 +68,17 @@ enum Commands {
     },
 
     /// Stores a secret by name
-    #[command(arg_required_else_help = true)]
-    Set { key: String, value: String },
+    #[command(arg_required_else_help = false)]
+    Set {
+        key: String,
+        value: Option<String>,
+        /// Prompt for secret value
+        #[arg(long = "prompt")]
+        prompt: bool,
+        /// Read secret from file
+        #[arg(long = "file")]
+        file: Option<PathBuf>,
+    },
 
     /// Retrieves secret by name
     #[command(arg_required_else_help = true)]
@@ -105,10 +114,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Keynest::init_with_storage_and_kdf(password, storage, kdf)?;
             println!("keystore initialized");
         }
-        Commands::Set { key, value } => {
+        Commands::Set {
+            key,
+            value,
+            prompt,
+            file,
+        } => {
+            let secret = if prompt {
+                rpassword::prompt_password("Secret: ")?
+            } else if let Some(path) = file {
+                std::fs::read_to_string(&path)?
+            } else {
+                value.ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "secret value required: provide as argument, --prompt, or --file"
+                    )
+                })?
+            };
+
             let storage = resolve_storage(args.store.clone())?;
             let mut kn = Keynest::open_with_storage(password, storage)?;
-            kn.set(&key, &value)?;
+            kn.set(&key, &secret)?;
             kn.save()?;
             println!("stored secret '{key}'");
         }

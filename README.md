@@ -51,8 +51,10 @@ cargo build --release
 # Initialize a new keystore
 keynest init
 
-# Store a secret
-keynest set github_token "ghp_xxxx"
+# Store a secret (three ways)
+keynest set github_token "ghp_xxxx"           # as argument
+keynest set github_token --file secret.txt    # from file
+keynest set github_token --prompt             # interactive prompt
 
 # Retrieve a secret
 keynest get github_token
@@ -81,8 +83,8 @@ keynest rekey --argon-mem 131072  # upgrade memory cost
 | Command | Description |
 |---------|-------------|
 | `init` | Initialize a new keystore |
-| `set <key> <value>` | Store a secret |
-| `get <key>` | Retrieve a secret |
+| `set <key> [<value>]` | Store a secret (value, --file, or --prompt) |
+| `get <key>` | Retrieve a secret (exits 1 if not found) |
 | `update <key> <value>` | Update existing secret |
 | `list [--all]` | List keys (--all shows values & timestamps) |
 | `remove <key>` | Remove a secret |
