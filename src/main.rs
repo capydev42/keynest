@@ -124,7 +124,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let kn = Keynest::open_with_storage(password, storage)?;
             match kn.get(&key) {
                 Some(secret) => println!("{secret}"),
-                None => println!("key not found"),
+                None => {
+                    eprintln!("key not found: {key}");
+                    std::process::exit(1);
+                }
             }
         }
         Commands::List { all } => {
@@ -168,10 +171,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let storage = resolve_storage(args.store.clone())?;
             let mut kn = Keynest::open_with_storage(password, storage)?;
             kn.remove(&key)?;
-            match kn.save() {
-                Ok(_) => println!("key : '{key}' removed successfully"),
-                Err(e) => panic!("Error at removing key : '{key}', {e}"),
-            }
+            kn.save()?;
+            println!("key : '{key}' removed successfully");
         }
         Commands::Info => {
             let storage = resolve_storage(args.store.clone())?;

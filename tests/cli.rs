@@ -141,7 +141,7 @@ fn init_fails_if_store_exists() {
         .arg("init")
         .assert()
         .failure()
-        .stderr(predicate::str::contains("keynest store already exists"));
+        .stderr(predicate::str::contains("keystore already exists"));
 }
 
 #[test]
@@ -200,8 +200,8 @@ fn remove_secret_works() {
         .arg(&store)
         .args(["get", "A"])
         .assert()
-        .success()
-        .stdout(predicate::str::contains("not found"));
+        .failure()
+        .stderr(predicate::str::contains("not found"));
 }
 
 #[test]

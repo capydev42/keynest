@@ -132,7 +132,10 @@ impl Keynest {
         kdf: KdfParams,
     ) -> Result<Self> {
         if storage.exists() {
-            bail!("keynest store already exists");
+            bail!(
+                "keystore already exists: {}\nUse `keynest rekey` or remove the file.",
+                storage.path().display()
+            );
         }
 
         let store = Store::new();
@@ -187,7 +190,10 @@ impl Keynest {
     /// - The keystore is corrupted
     pub fn open_with_storage(password: Zeroizing<String>, storage: Storage) -> Result<Self> {
         if !storage.exists() {
-            bail!("keynest store does not exist");
+            bail!(
+                "keystore does not exist: {}\nRun `keynest init` first.",
+                storage.path().display()
+            );
         }
 
         let data = storage.load()?;
@@ -416,6 +422,22 @@ impl StoreInfo {
     }
 }
 
+fn format_size(bytes: u64) -> String {
+    const KB: u64 = 1024;
+    const MB: u64 = KB * 1024;
+    const GB: u64 = MB * 1024;
+
+    if bytes >= GB {
+        format!("{:.1} GB", bytes as f64 / GB as f64)
+    } else if bytes >= MB {
+        format!("{:.1} MB", bytes as f64 / MB as f64)
+    } else if bytes >= KB {
+        format!("{:.1} KB", bytes as f64 / KB as f64)
+    } else {
+        format!("{} bytes", bytes)
+    }
+}
+
 impl std::fmt::Display for StoreInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "Keynest Store Information")?;
@@ -424,7 +446,7 @@ impl std::fmt::Display for StoreInfo {
 
         writeln!(f, "Location")?;
         writeln!(f, "  Path:              {}", self.path.display())?;
-        writeln!(f, "  Size:              {} bytes", self.file_size)?;
+        writeln!(f, "  Size:              {}", format_size(self.file_size))?;
         writeln!(f, "  Format version:    {}", self.version)?;
         writeln!(f)?;
 
