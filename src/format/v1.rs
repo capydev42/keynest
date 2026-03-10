@@ -5,7 +5,7 @@
 //! MAGIC (4) | VERSION (1) | MEM_COST (4) | TIME_COST (4) | PARALLELISM (4) | SALT (16) | NONCE (24) | CIPHERTEXT
 //! ```
 
-use super::KeystoreFile;
+use super::{Header, KeystoreFile};
 use crate::{
     KdfParams,
     crypto::{SALT_LEN, algorithm::Algorithm},
@@ -53,13 +53,8 @@ pub fn parse(data: &[u8]) -> Result<KeystoreFile> {
 
     let kdf = KdfParams::new(mem_cost, time_cost, parallelism)?;
 
-    Ok(KeystoreFile::new(
-        kdf,
-        Algorithm::XChaCha20Poly1305,
-        salt,
-        nonce,
-        ciphertext,
-    ))
+    let header = Header::new(kdf, Algorithm::XChaCha20Poly1305, salt, nonce);
+    Ok(KeystoreFile::new(header, ciphertext))
 }
 
 #[cfg(test)]

@@ -85,6 +85,24 @@ This design allows adding new encryption algorithms (e.g., AES-GCM) by:
 2. Creating a new implementation module
 3. Adding a match arm in the dispatch methods
 
+### Authenticated Additional Data (AAD)
+
+The file format includes AAD (Authenticated Additional Data) to protect header metadata from tampering:
+
+**AAD includes:**
+- Magic bytes (`KNST`)
+- Format version
+- KDF parameters (memory, time, parallelism)
+- Algorithm ID
+- Salt
+
+**Not included in AAD:**
+- Nonce (generated during encryption, not known beforehand)
+
+**Why AAD matters:**
+- If an attacker modifies any header field (e.g., KDF params, algorithm, salt), decryption will fail
+- This provides defense-in-depth against file tampering attacks
+
 ---
 
 ## On-disk Format
@@ -182,6 +200,19 @@ impl Drop for Keynest {
 ```
 
 Note: The salt is stored in the file format (KeystoreFile) which is persisted to disk, not kept in memory-only.
+
+---
+
+## Size Limits
+
+To prevent memory exhaustion attacks, the parser enforces size limits:
+
+| Limit | Value | Description |
+|-------|-------|-------------|
+| Max TLV size | 1 MiB | Maximum size for any single TLV entry |
+| Max ciphertext | 16 MiB | Maximum size for encrypted data |
+
+These limits prevent attackers from crafting malicious files that could cause excessive memory allocation during parsing.
 
 ---
 

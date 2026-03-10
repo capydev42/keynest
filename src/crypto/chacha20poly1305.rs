@@ -6,7 +6,7 @@ use super::SALT_LEN;
 use anyhow::{Result, anyhow};
 use chacha20poly1305::{
     Key, XChaCha20Poly1305, XNonce,
-    aead::{Aead, KeyInit},
+    aead::{Aead, KeyInit, Payload},
 };
 use getrandom::fill;
 use zeroize::Zeroizing;
@@ -31,7 +31,7 @@ pub fn generate_salt() -> Result<[u8; SALT_LEN]> {
 /// # Errors
 ///
 /// Returns an error if random number generation fails.
-pub fn encrypt(key: &[u8], plaintext: &[u8]) -> Result<(Vec<u8>, Vec<u8>)> {
+pub fn encrypt(key: &[u8], plaintext: &[u8], aad: &[u8]) -> Result<(Vec<u8>, Vec<u8>)> {
     if key.len() != KEY_LEN {
         return Err(anyhow!("invalid key length"));
     }
@@ -42,7 +42,13 @@ pub fn encrypt(key: &[u8], plaintext: &[u8]) -> Result<(Vec<u8>, Vec<u8>)> {
     secure_random(&mut nonce)?;
 
     let ciphertext = cipher
-        .encrypt(XNonce::from_slice(&nonce), plaintext)
+        .encrypt(
+            XNonce::from_slice(&nonce),
+            Payload {
+                msg: plaintext,
+                aad,
+            },
+        )
         .map_err(|_| anyhow!("encryption failed"))?;
 
     Ok((ciphertext, nonce))
@@ -58,7 +64,12 @@ pub fn encrypt(key: &[u8], plaintext: &[u8]) -> Result<(Vec<u8>, Vec<u8>)> {
 /// - The key is incorrect
 /// - The ciphertext has been tampered with
 /// - The data is corrupted
-pub fn decrypt(key: &[u8], nonce: &[u8], ciphertext: &[u8]) -> Result<Zeroizing<Vec<u8>>> {
+pub fn decrypt(
+    key: &[u8],
+    nonce: &[u8],
+    ciphertext: &[u8],
+    aad: &[u8],
+) -> Result<Zeroizing<Vec<u8>>> {
     if key.len() != KEY_LEN {
         return Err(anyhow!("invalid key length"));
     }
@@ -70,7 +81,13 @@ pub fn decrypt(key: &[u8], nonce: &[u8], ciphertext: &[u8]) -> Result<Zeroizing<
     let cipher = XChaCha20Poly1305::new(Key::from_slice(key));
 
     let plaintext = cipher
-        .decrypt(XNonce::from_slice(nonce), ciphertext)
+        .decrypt(
+            XNonce::from_slice(nonce),
+            Payload {
+                msg: ciphertext,
+                aad,
+            },
+        )
         .map_err(|_| anyhow!("Invalid password or corrupted data"))?;
     Ok(Zeroizing::new(plaintext))
 }

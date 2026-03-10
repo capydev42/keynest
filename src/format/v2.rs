@@ -3,7 +3,7 @@
 //! V2 uses TLV (Type-Length-Value) encoding for extensibility.
 
 use super::tlv;
-use super::{KeystoreFile, MAGIC, MAGIC_LEN, VER_LEN};
+use super::{Header, KeystoreFile, MAGIC, MAGIC_LEN, VER_LEN};
 use crate::{
     KdfParams,
     crypto::{SALT_LEN, algorithm::Algorithm},
@@ -12,7 +12,10 @@ use anyhow::{Result, bail};
 
 /// V2 file format version.
 pub const VERSION_V2: u8 = 2;
+/// Size of the AEAD authentication tag (Poly1305).
 const AEAD_TAG_LEN: usize = 16;
+/// Maximum allowed ciphertext size to prevent memory exhaustion attacks.
+const MAX_CIPHERTEXT: usize = 16 * 1024 * 1024; // 16 MiB max
 
 /// TLV type identifiers for v2 format.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -94,7 +97,7 @@ pub fn parse(data: &[u8]) -> Result<KeystoreFile> {
                 kdf = Some(KdfParams::new(mem, time, par)?);
             }
             TlvType::Algorithm => {
-                if algorithm.is_some(){
+                if algorithm.is_some() {
                     bail!("duplicate algorithm field");
                 }
 
@@ -148,7 +151,12 @@ pub fn parse(data: &[u8]) -> Result<KeystoreFile> {
         bail!("ciphertext too short");
     }
 
-    Ok(KeystoreFile::new(kdf, algorithm, salt, nonce, ciphertext))
+    if ciphertext.len() > MAX_CIPHERTEXT {
+        bail!("ciphertext too large");
+    }
+
+    let header = Header::new(kdf, algorithm, salt, nonce);
+    Ok(KeystoreFile::new(header, ciphertext))
 }
 
 /// Serializes a KeystoreFile to v2 format bytes using TLV encoding.
@@ -184,21 +192,45 @@ pub fn serialize(file: &KeystoreFile) -> Result<Vec<u8>> {
     Ok(buf)
 }
 
+/// Builds AAD from header data for authenticated encryption.
+///
+/// Note: Nonce is NOT included in AAD because it's generated during encryption.
+/// The AAD protects KDF params, algorithm, and salt from being modified.
+pub(crate) fn build_header_aad(header: &Header) -> Vec<u8> {
+    let mut aad = Vec::new();
+
+    aad.extend_from_slice(MAGIC);
+    aad.push(VERSION_V2);
+
+    let mut kdf_bytes = Vec::with_capacity(12);
+    kdf_bytes.extend_from_slice(&header.kdf().mem_cost_kib().to_le_bytes());
+    kdf_bytes.extend_from_slice(&header.kdf().time_cost().to_le_bytes());
+    kdf_bytes.extend_from_slice(&header.kdf().parallelism().to_le_bytes());
+
+    let algo_id: u8 = header.algorithm().into();
+
+    tlv::encode(TlvType::Kdf.into(), &kdf_bytes, &mut aad);
+    tlv::encode(TlvType::Algorithm.into(), &[algo_id], &mut aad);
+    tlv::encode(TlvType::Salt.into(), header.salt(), &mut aad);
+
+    aad
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::crypto::KdfParams;
-    use crate::format::{KeystoreFile, MAGIC, parse, serialize};
+    use crate::format::{Header, KeystoreFile, MAGIC, parse, serialize};
 
     #[test]
     fn v2_roundtrip() {
-        let file = KeystoreFile::new(
+        let header = Header::new(
             KdfParams::new(65536, 3, 2).unwrap(),
             Algorithm::XChaCha20Poly1305,
             vec![1u8; 16],
             vec![2u8; 24],
-            vec![3u8; 32],
         );
+        let file = KeystoreFile::new(header, vec![3u8; 32]);
 
         let bytes = serialize(&file).unwrap();
 
@@ -250,10 +282,10 @@ mod tests {
         bytes.extend_from_slice(&24u16.to_le_bytes());
         bytes.extend_from_slice(&[0u8; 24]);
 
-        // Add required Ciphertext TLV
+        // Add required Ciphertext TLV (minimum 16 bytes for AEAD tag)
         bytes.push(4); // type = Ciphertext
-        bytes.extend_from_slice(&5u16.to_le_bytes());
-        bytes.extend_from_slice(b"hello");
+        bytes.extend_from_slice(&16u16.to_le_bytes());
+        bytes.extend_from_slice(&[0u8; 16]);
 
         // Should still parse successfully, ignoring unknown TLV
         let result = parse(&bytes);
@@ -294,18 +326,19 @@ mod tests {
 
     #[test]
     fn v2_empty_ciphertext() {
-        let file = KeystoreFile::new(
+        let header = Header::new(
             KdfParams::default(),
             Algorithm::XChaCha20Poly1305,
             vec![1u8; 16],
             vec![2u8; 24],
-            vec![], // empty ciphertext
         );
+        // Minimum ciphertext is 16 bytes (AEAD tag)
+        let file = KeystoreFile::new(header, vec![0u8; 16]);
 
         let bytes = serialize(&file).unwrap();
         let parsed = parse(&bytes).unwrap();
 
-        assert!(parsed.ciphertext().is_empty());
+        assert_eq!(parsed.ciphertext().len(), 16);
         assert_eq!(parsed.algorithm(), Algorithm::XChaCha20Poly1305);
     }
 
@@ -386,5 +419,44 @@ mod tests {
         let err = result.unwrap_err().to_string();
         eprintln!("Error: {}", err);
         assert!(err.contains("unsupported algorithm"));
+    }
+
+    #[test]
+    fn aad_authentication_works() {
+        use crate::crypto::derive_key;
+        use crate::format::{Header, parse, serialize};
+
+        // Create and encrypt with more data
+        let kdf = KdfParams::new(65536, 3, 2).unwrap();
+        let salt = vec![1u8; 16];
+        let key = derive_key("password", &salt, kdf).unwrap();
+
+        let plaintext = b"this is some secret data that is long enough";
+
+        let (header, ciphertext) =
+            Header::encrypt_store(kdf, Algorithm::XChaCha20Poly1305, salt, &key, plaintext)
+                .unwrap();
+
+        let file = KeystoreFile::new(header, ciphertext);
+        let bytes = serialize(&file).unwrap();
+
+        // Verify decryption works
+        let parsed = parse(&bytes).unwrap();
+        let key2 = derive_key("password", parsed.salt(), *parsed.kdf()).unwrap();
+        let decrypted = parsed.decrypt(&key2).unwrap();
+        assert_eq!(*decrypted, plaintext);
+
+        // Tamper with ciphertext - should fail
+        let mut tampered_bytes = bytes.clone();
+        if tampered_bytes.len() > 50 {
+            tampered_bytes[50] ^= 0xFF; // flip some bits in ciphertext
+        }
+        let parsed = parse(&tampered_bytes).unwrap();
+        let key3 = derive_key("password", parsed.salt(), *parsed.kdf()).unwrap();
+        let result = parsed.decrypt(&key3);
+        assert!(
+            result.is_err(),
+            "decryption should fail with tampered ciphertext"
+        );
     }
 }

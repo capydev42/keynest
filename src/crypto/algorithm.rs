@@ -34,9 +34,9 @@ impl Algorithm {
     /// # Errors
     ///
     /// Returns an error if encryption fails.
-    pub fn encrypt(self, key: &[u8], plaintext: &[u8]) -> Result<(Vec<u8>, Vec<u8>)> {
+    pub fn encrypt(self, key: &[u8], plaintext: &[u8], aad: &[u8]) -> Result<(Vec<u8>, Vec<u8>)> {
         match self {
-            Algorithm::XChaCha20Poly1305 => chacha20poly1305::encrypt(key, plaintext),
+            Algorithm::XChaCha20Poly1305 => chacha20poly1305::encrypt(key, plaintext, aad),
         }
     }
 
@@ -50,9 +50,10 @@ impl Algorithm {
         key: &[u8],
         nonce: &[u8],
         ciphertext: &[u8],
+        aad: &[u8],
     ) -> Result<Zeroizing<Vec<u8>>> {
         match self {
-            Algorithm::XChaCha20Poly1305 => chacha20poly1305::decrypt(key, nonce, ciphertext),
+            Algorithm::XChaCha20Poly1305 => chacha20poly1305::decrypt(key, nonce, ciphertext, aad),
         }
     }
 

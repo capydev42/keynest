@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Added
+- Header struct for authenticated metadata (AAD)
+- AAD (Authenticated Additional Data) for AEAD encryption
+- Unit test for AAD authentication
+- Duplicate TLV field detection (KDF, Algorithm, Salt, Nonce, Ciphertext)
+- AEAD_TAG_LEN constant and ciphertext length validation (min 16 bytes)
+- Memory exhaustion protection (MAX_CIPHERTEXT: 16 MiB, MAX_TLV_SIZE: 1 MiB)
+
+### Changed
+- Refactored file format: introduced Header struct for metadata
+
+### Security
+- AAD protects header metadata from tampering
+- Validates ciphertext has minimum length for AEAD tag
+- Rejects duplicate fields in TLV parsing
+- Added size limits to prevent memory exhaustion attacks
+
+### Documentation
+- Added AAD section to CRYPTO.md
+
+---
+
 ## [0.3.0] - 2026-03-07
 
 ### Added
