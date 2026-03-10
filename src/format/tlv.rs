@@ -15,6 +15,8 @@ pub struct Tlv<'a> {
 }
 
 const HEADER_LEN: usize = 3; // type(1) + len(2)
+/// Maximum allowed TLV value size to prevent memory exhaustion attacks.
+const MAX_TLV_SIZE: usize = 1024 * 1024; // 1 MiB max per TLV
 
 impl<'a> Tlv<'a> {
     /// Returns the type of this TLV entry.
@@ -64,6 +66,10 @@ pub fn decode_all(data: &[u8]) -> Result<Vec<Tlv<'_>>> {
 
         let ty = remaining[0];
         let len = u16::from_le_bytes([remaining[1], remaining[2]]) as usize;
+
+        if len > MAX_TLV_SIZE {
+            bail!("tlv value too large");
+        }
 
         remaining = &remaining[HEADER_LEN..];
 
