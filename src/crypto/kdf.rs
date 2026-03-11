@@ -2,11 +2,12 @@
 
 use anyhow::{Context, Result};
 use argon2::{Algorithm, Argon2, Params, Version};
+use serde::Serialize;
 
 use super::KEY_LEN;
 
 /// Parameters for Argon2id key derivation.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize)]
 pub struct KdfParams {
     mem_cost_kib: u32,
     time_cost: u32,

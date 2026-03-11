@@ -6,6 +6,10 @@ fn bin() -> Command {
     Command::new(assert_cmd::cargo::cargo_bin!("keynest"))
 }
 
+fn is_valid_json() -> impl predicates::Predicate<str> {
+    predicate::function(|s: &str| serde_json::from_str::<serde_json::Value>(s).is_ok())
+}
+
 #[test]
 fn init_creates_store_file() {
     let dir = tempdir().unwrap();
@@ -141,7 +145,7 @@ fn init_fails_if_store_exists() {
         .arg("init")
         .assert()
         .failure()
-        .stderr(predicate::str::contains("keynest store already exists"));
+        .stderr(predicate::str::contains("keystore already exists"));
 }
 
 #[test]
@@ -200,8 +204,8 @@ fn remove_secret_works() {
         .arg(&store)
         .args(["get", "A"])
         .assert()
-        .success()
-        .stdout(predicate::str::contains("not found"));
+        .failure()
+        .stderr(predicate::str::contains("not found"));
 }
 
 #[test]
@@ -389,4 +393,196 @@ fn rekey_fails_if_password_confirmation_mismatch() {
         .write_stdin("newpw\nwrongpw\n")
         .assert()
         .failure();
+}
+
+#[test]
+fn set_with_file() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+    let secret_file = dir.path().join("secret.txt");
+
+    std::fs::write(&secret_file, "secret_from_file").unwrap();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["set", "mykey", "--file"])
+        .arg(&secret_file)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("stored secret"));
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["get", "mykey"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("secret_from_file"));
+}
+
+#[test]
+fn set_missing_value_fails() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    // Missing value without --prompt or --file should fail
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["set", "mykey"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("secret value required"));
+}
+
+#[test]
+fn get_json_output() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["set", "mykey", "myvalue"])
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["get", "mykey", "--json"])
+        .assert()
+        .success()
+        .stdout(is_valid_json())
+        .stdout(predicate::str::contains("mykey"))
+        .stdout(predicate::str::contains("myvalue"));
+}
+
+#[test]
+fn list_json_output() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["set", "key1", "val1"])
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["set", "key2", "val2"])
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["list", "--json"])
+        .assert()
+        .success()
+        .stdout(is_valid_json())
+        .stdout(predicate::str::contains("key1"))
+        .stdout(predicate::str::contains("key2"));
+}
+
+#[test]
+fn list_all_json_output() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["set", "mykey", "myvalue"])
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["list", "-a", "--json"])
+        .assert()
+        .success()
+        .stdout(is_valid_json())
+        .stdout(predicate::str::contains("mykey"))
+        .stdout(predicate::str::contains("updated"))
+        .stdout(predicate::str::contains("value").not());
+}
+
+#[test]
+fn info_json_output() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["info", "--json"])
+        .assert()
+        .success()
+        .stdout(is_valid_json())
+        .stdout(predicate::str::contains("XChaCha20-Poly1305"));
 }

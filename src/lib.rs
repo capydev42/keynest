@@ -38,6 +38,7 @@ pub use crate::storage::Storage;
 use crate::store::SecretEntry;
 use anyhow::{Context, Result, bail};
 use directories::ProjectDirs;
+use serde::Serialize;
 use std::path::PathBuf;
 use store::Store;
 use zeroize::{Zeroize, Zeroizing};
@@ -132,7 +133,10 @@ impl Keynest {
         kdf: KdfParams,
     ) -> Result<Self> {
         if storage.exists() {
-            bail!("keynest store already exists");
+            bail!(
+                "keystore already exists: {}\nUse `keynest rekey` or remove the file.",
+                storage.path().display()
+            );
         }
 
         let store = Store::new();
@@ -187,7 +191,10 @@ impl Keynest {
     /// - The keystore is corrupted
     pub fn open_with_storage(password: Zeroizing<String>, storage: Storage) -> Result<Self> {
         if !storage.exists() {
-            bail!("keynest store does not exist");
+            bail!(
+                "keystore does not exist: {}\nRun `keynest init` first.",
+                storage.path().display()
+            );
         }
 
         let data = storage.load()?;
@@ -388,6 +395,7 @@ pub fn default_storage() -> Result<Storage> {
 /// Information about a keystore.
 ///
 /// Returned by [`Keynest::info`].
+#[derive(Serialize)]
 pub struct StoreInfo {
     path: PathBuf,
     file_size: u64,
@@ -414,6 +422,47 @@ impl StoreInfo {
     pub fn kdf(&self) -> &KdfParams {
         &self.kdf
     }
+
+    /// Returns the encryption algorithm.
+    pub fn algorithm(&self) -> &'static str {
+        self.algorithm
+    }
+
+    /// Returns the nonce length in bytes.
+    pub fn nonce_len(&self) -> usize {
+        self.nonce_len
+    }
+
+    /// Returns the format version.
+    pub fn version(&self) -> u8 {
+        self.version
+    }
+
+    /// Returns the file size in bytes.
+    pub fn file_size(&self) -> u64 {
+        self.file_size
+    }
+
+    /// Returns the file path.
+    pub fn path(&self) -> &PathBuf {
+        &self.path
+    }
+}
+
+fn format_size(bytes: u64) -> String {
+    const KB: u64 = 1024;
+    const MB: u64 = KB * 1024;
+    const GB: u64 = MB * 1024;
+
+    if bytes >= GB {
+        format!("{:.1} GB", bytes as f64 / GB as f64)
+    } else if bytes >= MB {
+        format!("{:.1} MB", bytes as f64 / MB as f64)
+    } else if bytes >= KB {
+        format!("{:.1} KB", bytes as f64 / KB as f64)
+    } else {
+        format!("{} bytes", bytes)
+    }
 }
 
 impl std::fmt::Display for StoreInfo {
@@ -424,7 +473,7 @@ impl std::fmt::Display for StoreInfo {
 
         writeln!(f, "Location")?;
         writeln!(f, "  Path:              {}", self.path.display())?;
-        writeln!(f, "  Size:              {} bytes", self.file_size)?;
+        writeln!(f, "  Size:              {}", format_size(self.file_size))?;
         writeln!(f, "  Format version:    {}", self.version)?;
         writeln!(f)?;
 

@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Duplicate TLV field detection (KDF, Algorithm, Salt, Nonce, Ciphertext)
 - AEAD_TAG_LEN constant and ciphertext length validation (min 16 bytes)
 - Memory exhaustion protection (MAX_CIPHERTEXT: 16 MiB, MAX_TLV_SIZE: 1 MiB)
+- Header::encrypt_store() API for cleaner encryption
+- Set command: --file and --prompt options for secret input
 
 ### Changed
 - Refactored file format: introduced Header struct for metadata
@@ -25,6 +27,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Validates ciphertext has minimum length for AEAD tag
 - Rejects duplicate fields in TLV parsing
 - Added size limits to prevent memory exhaustion attacks
+
+### CLI Improvements
+- Return exit code 1 when key not found (scripts can detect errors)
+- Remove panic on save failure in remove command
+- Show file path in "keystore already exists" and "keystore does not exist" errors
+- Show human-readable file size in info command (e.g., "18.0 KB")
+- Add `--json` flag for get, list, and info commands
 
 ### Documentation
 - Added AAD section to CRYPTO.md
