@@ -244,7 +244,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let info = kn.info()?;
 
             if args.json {
-                println!("{}", serde_json::to_string(&info)?);
+                print_json(&info);
             } else {
                 println!("{info}");
             }
