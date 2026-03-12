@@ -58,6 +58,8 @@ keynest set github_token --prompt             # interactive prompt
 
 # Retrieve a secret
 keynest get github_token
+keynest get github_token --clip              # copy to clipboard (auto-clears after 15s)
+keynest get github_token --clip --timeout 30 # copy with custom timeout
 
 # List all keys
 keynest list
@@ -85,6 +87,7 @@ keynest rekey --argon-mem 131072  # upgrade memory cost
 | `init` | Initialize a new keystore |
 | `set <key> [<value>]` | Store a secret (value, --file, or --prompt) |
 | `get <key>` | Retrieve a secret (exits 1 if not found) |
+| `get <key> --clip` | Copy secret to clipboard (auto-clears after 15s) |
 | `update <key> <value>` | Update existing secret |
 | `list [--all]` | List keys (--all shows values & timestamps) |
 | `remove <key>` | Remove a secret |
@@ -105,6 +108,8 @@ All commands support `--json` for structured output (get, list, info).
 ### CLI Options
 - `--store <path>` - Specify custom keystore location
 - `--json` - Output in JSON format (for get, list, info commands)
+- `--clip` - Copy secret to clipboard (with auto-clear)
+- `--timeout <seconds>` - Clipboard auto-clear delay (default: 15, for use with --clip)
 
 ### KDF Options (for init/rekey)
 - `--argon-mem <kb>` - Memory cost in KiB (default: 65536)

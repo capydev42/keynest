@@ -96,7 +96,15 @@ enum Commands {
 
     /// Retrieves secret by name
     #[command(arg_required_else_help = true)]
-    Get { key: String },
+    Get {
+        key: String,
+        /// Copy secret to clipboard
+        #[arg(long, short = 'c')]
+        clip: bool,
+        /// Seconds before clipboard is cleared (default: 15, min: 1)
+        #[arg(long = "timeout", default_value_t = 15)]
+        timeout: u64,
+    },
 
     /// Updates existing secret value by name
     #[command(arg_required_else_help = true)]
@@ -118,7 +126,39 @@ enum Commands {
     Info,
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn copy_to_clipboard(secret: &str, timeout: u64) -> anyhow::Result<()> {
+    use arboard::Clipboard;
+    use std::{thread::sleep, time::Duration};
+
+    let mut cb = Clipboard::new()?;
+    let old = cb.get_text().ok();
+
+    cb.set_text(secret.to_string())?;
+
+    eprintln!("Secret copied to clipboard for {timeout}s");
+    eprintln!("Press Ctrl+C to clear early");
+
+    let old_clip = old.clone();
+    ctrlc::set_handler(move || {
+        if let Ok(mut cb) = Clipboard::new() {
+            let _ = cb.set_text(old_clip.clone().unwrap_or_default());
+        }
+        sleep(Duration::from_millis(100));
+        std::process::exit(0);
+    })?;
+
+    let had_old = old.is_some();
+    sleep(Duration::from_secs(timeout));
+
+    let mut cb = Clipboard::new()?;
+    cb.set_text(old.unwrap_or_default())?;
+
+    eprintln!("Clipboard {}", if had_old { "restored" } else { "cleared" });
+
+    Ok(())
+}
+
+fn main() -> anyhow::Result<()> {
     let args = Cli::parse();
     let password = auth::read_password()?;
     match args.command {
@@ -159,12 +199,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             kn.save()?;
             println!("secret '{key}' updated.");
         }
-        Commands::Get { key } => {
+        Commands::Get { key, clip, timeout } => {
+            if timeout == 0 {
+                anyhow::bail!("timeout must be greater than 0");
+            }
+
             let storage = resolve_storage(args.store.clone())?;
             let kn = Keynest::open_with_storage(password, storage)?;
             match kn.get(&key) {
                 Some(secret) => {
-                    if args.json {
+                    if clip {
+                        copy_to_clipboard(secret, timeout)?;
+                    } else if args.json {
                         print_json(&serde_json::json!({"key": key, "value": secret}));
                     } else {
                         print_plain(&secret);
@@ -236,7 +282,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut kn = Keynest::open_with_storage(password, storage)?;
             kn.remove(&key)?;
             kn.save()?;
-            println!("key : '{key}' removed successfully");
+            println!("Removed '{key}'");
         }
         Commands::Info => {
             let storage = resolve_storage(args.store.clone())?;
