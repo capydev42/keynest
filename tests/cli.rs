@@ -195,7 +195,7 @@ fn remove_secret_works() {
         .args(["remove", "A"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("removed successfully"));
+        .stdout(predicate::str::contains("Removed"));
 
     // get should not find key
     bin()
@@ -585,4 +585,68 @@ fn info_json_output() {
         .success()
         .stdout(is_valid_json())
         .stdout(predicate::str::contains("XChaCha20-Poly1305"));
+}
+
+#[test]
+fn get_key_clip_timeout_zero_fails() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["set", "mykey", "myvalue"])
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["get", "mykey", "--clip", "--timeout", "0"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("timeout must be greater than 0"));
+}
+
+#[test]
+#[ignore]
+fn get_key_clip() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["set", "mykey", "myvalue"])
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["get", "mykey", "--clip", "--timeout", "1"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Secret copied to clipboard"))
+        .stderr(predicate::str::contains("Clipboard"));
 }

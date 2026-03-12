@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Memory exhaustion protection (MAX_CIPHERTEXT: 16 MiB, MAX_TLV_SIZE: 1 MiB)
 - Header::encrypt_store() API for cleaner encryption
 - Set command: --file and --prompt options for secret input
+- Get command: --clip and --timeout options for clipboard support
 
 ### Changed
 - Refactored file format: introduced Header struct for metadata
@@ -34,6 +35,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Show file path in "keystore already exists" and "keystore does not exist" errors
 - Show human-readable file size in info command (e.g., "18.0 KB")
 - Add `--json` flag for get, list, and info commands
+- Add `--clip` flag to copy secret to clipboard with auto-clear
+- Add `--timeout` flag to customize clipboard auto-clear delay (default: 15s)
 
 ### Documentation
 - Added AAD section to CRYPTO.md
