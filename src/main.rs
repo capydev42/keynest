@@ -59,10 +59,6 @@ struct Cli {
     #[arg(long, global = true, value_name = "PATH", env = "KEYNEST_PATH")]
     store: Option<PathBuf>,
 
-    /// Output as JSON
-    #[arg(long, global = true)]
-    json: bool,
-
     #[command(subcommand)]
     command: Commands,
 }
@@ -70,19 +66,35 @@ struct Cli {
 #[derive(Debug, Subcommand)]
 enum Commands {
     /// Initializes the secret storage
+    #[command(after_help = "\
+Examples:
+  keynest init                                      Initialize a new keystore with default settings
+  keynest init --argon-mem 131072                 Initialize with higher memory cost (128 MiB)
+  keynest init --argon-time 5 --argon-mem 65536   Initialize with custom Argon2 parameters")]
     Init {
         #[command(flatten)]
         argon2: Argon2Args,
     },
 
-    /// Change password and/or argon2 parametes and re-encrypt keystore
+    /// Change password and/or argon2 parameters and re-encrypt keystore
+    #[command(after_help = "\
+Examples:
+  keynest rekey                                  Change the keystore password
+  keynest rekey --argon-mem 131072              Change password and upgrade memory cost")]
     Rekey {
         #[command(flatten)]
         argon2: Argon2Args,
     },
 
     /// Stores a secret by name
-    #[command(arg_required_else_help = false)]
+    #[command(
+        arg_required_else_help = false,
+        after_help = "\
+Examples:
+  keynest set api_key \"secret123\"              Store a secret from command line argument
+  keynest set api_key --file secret.txt         Store a secret from a file
+  keynest set api_key --prompt                   Store a secret from interactive prompt"
+    )]
     Set {
         key: String,
         value: Option<String>,
@@ -95,7 +107,15 @@ enum Commands {
     },
 
     /// Retrieves secret by name
-    #[command(arg_required_else_help = true)]
+    #[command(
+        arg_required_else_help = true,
+        after_help = "\
+Examples:
+  keynest get api_key                              Display the secret value on stdout
+  keynest get api_key --clip                       Copy the secret to clipboard (auto-clears after 15 seconds)
+  keynest get api_key -c --timeout 30              Copy the secret to clipboard with custom timeout
+  keynest get api_key --json                       Output the secret as JSON (includes key and value)"
+    )]
     Get {
         key: String,
         /// Copy secret to clipboard
@@ -104,26 +124,58 @@ enum Commands {
         /// Seconds before clipboard is cleared (default: 15, min: 1)
         #[arg(long = "timeout", default_value_t = 15)]
         timeout: u64,
+        /// Output as JSON
+        #[arg(long, short = 'j')]
+        json: bool,
     },
 
     /// Updates existing secret value by name
-    #[command(arg_required_else_help = true)]
+    #[command(
+        arg_required_else_help = true,
+        after_help = "\
+Examples:
+  keynest update api_key \"new_secret\"          Update an existing secret value"
+    )]
     Update { key: String, new_value: String },
 
     /// Lists all stored secrets
-    #[command(arg_required_else_help = false)]
+    #[command(
+        arg_required_else_help = false,
+        after_help = "\
+Examples:
+  keynest list                                   List all secret keys
+  keynest list --all                            List all secrets with timestamps
+  keynest list --json                           List all keys as JSON array
+  keynest list --all --json                    List all secrets with timestamps as JSON"
+    )]
     List {
         #[arg(required = false, short, long, default_value_t = false)]
         /// Print names and secrets
         all: bool,
+        /// Output as JSON
+        #[arg(long, short = 'j')]
+        json: bool,
     },
 
     /// Removes secrets by name
-    #[command(arg_required_else_help = true)]
+    #[command(
+        arg_required_else_help = true,
+        after_help = "\
+Examples:
+  keynest remove api_key                         Remove a secret from the keystore"
+    )]
     Remove { key: String },
 
     /// Shows information about the store
-    Info,
+    #[command(after_help = "\
+Examples:
+  keynest info                                   Show keystore information (version, algorithm, KDF parameters)
+  keynest info --json                            Output information as JSON")]
+    Info {
+        /// Output as JSON
+        #[arg(long, short = 'j')]
+        json: bool,
+    },
 }
 
 fn copy_to_clipboard(secret: &str, timeout: u64) -> anyhow::Result<()> {
@@ -199,7 +251,12 @@ fn main() -> anyhow::Result<()> {
             kn.save()?;
             println!("secret '{key}' updated.");
         }
-        Commands::Get { key, clip, timeout } => {
+        Commands::Get {
+            key,
+            clip,
+            timeout,
+            json,
+        } => {
             if timeout == 0 {
                 anyhow::bail!("timeout must be greater than 0");
             }
@@ -210,7 +267,7 @@ fn main() -> anyhow::Result<()> {
                 Some(secret) => {
                     if clip {
                         copy_to_clipboard(secret, timeout)?;
-                    } else if args.json {
+                    } else if json {
                         print_json(&serde_json::json!({"key": key, "value": secret}));
                     } else {
                         print_plain(&secret);
@@ -222,11 +279,11 @@ fn main() -> anyhow::Result<()> {
                 }
             }
         }
-        Commands::List { all } => {
+        Commands::List { all, json } => {
             let storage = resolve_storage(args.store.clone())?;
             let kn = Keynest::open_with_storage(password, storage)?;
 
-            if args.json {
+            if json {
                 if all {
                     let entries: Vec<_> = kn
                         .list_all()
@@ -284,12 +341,12 @@ fn main() -> anyhow::Result<()> {
             kn.save()?;
             println!("Removed '{key}'");
         }
-        Commands::Info => {
+        Commands::Info { json } => {
             let storage = resolve_storage(args.store.clone())?;
             let kn = Keynest::open_with_storage(password, storage.clone())?;
             let info = kn.info()?;
 
-            if args.json {
+            if json {
                 print_json(&info);
             } else {
                 println!("{info}");
