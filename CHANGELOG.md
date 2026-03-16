@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Added
+- Command trait for modular CLI architecture
+
+### CLI Improvements
+- Added Examples section to all command help texts
+- Validate that --prompt and value argument cannot be used together
+
+---
+
 ## [0.4.0] - 2026-03-13
 
 ### Added

@@ -453,6 +453,18 @@ fn set_missing_value_fails() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("secret value required"));
+
+    // --prompt and value together should fail
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["set", "mykey", "value", "--prompt"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "cannot use value argument together with --prompt",
+        ));
 }
 
 #[test]
