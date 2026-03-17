@@ -1,5 +1,10 @@
 # Keynest
 
+[![crates.io](https://img.shields.io/crates/v/keynest.svg)](https://crates.io/crates/keynest)
+[![docs.rs](https://img.shields.io/docsrs/keynest)](https://docs.rs/keynest)
+[![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](https://opensource.org/licenses/MIT)
+[![CI](https://github.com/capydev42/keynest/actions/workflows/ci.yml/badge.svg)](https://github.com/capydev42/keynest/actions/workflows/ci.yml)
+
 Stop committing secrets by accident.
 
 A simple, offline secrets manager that replaces `.env` files.
@@ -204,6 +209,69 @@ Keynest accepts passwords via:
 1. Environment variable: `KEYNEST_PASSWORD="secret" keynest get key`
 2. Stdin: `echo "secret" | keynest get key`
 3. Interactive prompt (default)
+
+---
+
+## Library Usage
+
+### Add as Dependency
+
+```bash
+cargo add keynest
+```
+
+```rust
+use keynest::{Keynest, Storage, KdfParams};
+use zeroize::Zeroizing;
+
+fn main() -> Result<()> {
+    let storage = Storage::new("/path/to/keystore.db");
+    let password = Zeroizing::new(String::from("my-password"));
+    
+    // Create new keystore with custom KDF parameters
+    let kdf = KdfParams::default();
+    let mut kn = Keynest::init_with_storage_and_kdf(password, storage, kdf)?;
+    
+    // Store secrets
+    kn.set("api_token", "secret123")?;
+    kn.save()?;
+    
+    // Later: reopen
+    let kn = Keynest::open_with_storage(Zeroizing::new(String::from("my-password")), storage)?;
+    assert_eq!(kn.get("api_token"), Some("secret123"));
+    
+    Ok(())
+}
+```
+
+---
+
+## Storage Location
+
+Default keystore locations by OS:
+- **Linux:** `~/.local/share/keynest/.keynest.db`
+- **macOS:** `~/Library/Application Support/keynest/.keynest.db`
+- **Windows:** `%APPDATA%\keynest\.keynest.db`
+
+Use `--store <path>` to override.
+
+---
+
+## Development
+
+```bash
+# Build
+cargo build
+
+# Test
+cargo test
+
+# Format
+cargo fmt
+
+# Lint
+cargo clippy -- -D warnings
+```
 
 ---
 
