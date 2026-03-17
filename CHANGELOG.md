@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Command trait for modular CLI architecture
+- New `exec` command to run commands with secrets as environment variables
 
 ### CLI Improvements
 - Added Examples section to all command help texts

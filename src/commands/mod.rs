@@ -6,6 +6,7 @@ pub trait Command {
 }
 
 pub mod common;
+pub mod exec;
 pub mod get;
 pub mod info;
 pub mod init;

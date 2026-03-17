@@ -70,6 +70,12 @@ keynest update github_token "ghp_yyyy"
 # Remove a secret
 keynest remove github_token
 
+# Run command with secrets as environment variables
+keynest exec -- docker compose up
+keynest exec --only API_KEY -- curl api.example.com
+keynest exec --prefix MY_ -- env
+keynest exec --print
+
 # Show keystore info (KDF params, creation date)
 keynest info
 
@@ -91,6 +97,7 @@ keynest rekey --argon-mem 131072  # upgrade memory cost
 | `update <key> <value>` | Update existing secret |
 | `list [--all]` | List keys (--all shows values & timestamps) |
 | `remove <key>` | Remove a secret |
+| `exec -- <cmd>` | Run command with secrets as environment variables |
 | `info` | Show keystore information (KDF params, creation date) |
 | `rekey` | Change password and/or KDF parameters |
 

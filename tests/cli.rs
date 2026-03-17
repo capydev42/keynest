@@ -662,3 +662,108 @@ fn get_key_clip() {
         .stderr(predicate::str::contains("Secret copied to clipboard"))
         .stderr(predicate::str::contains("Clipboard"));
 }
+
+#[test]
+fn exec_print_all_keys() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["set", "mykey", "myvalue"])
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["exec", "--print", "--", "env"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("MYKEY"))
+        .stdout(predicate::str::contains("myvalue"));
+}
+
+#[test]
+fn exec_with_prefix() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["set", "api_key", "secret123"])
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["exec", "--prefix", "MY_", "--print", "--", "env"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("MY_API_KEY"))
+        .stdout(predicate::str::contains("secret123"));
+}
+
+#[test]
+fn exec_only_specific_keys() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["set", "key1", "value1"])
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["set", "key2", "value2"])
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["exec", "--only", "key1", "--print", "--", "env"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("KEY1"))
+        .stdout(predicate::str::contains("value1"))
+        .stdout(predicate::str::contains("KEY2").not());
+}
