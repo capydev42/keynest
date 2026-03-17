@@ -1,8 +1,9 @@
 use clap::{Parser, Subcommand};
 
 use crate::commands::{
-    Command, get::GetCommand, info::InfoCommand, init::InitCommand, list::ListCommand,
-    rekey::RekeyCommand, remove::RemoveCommand, set::SetCommand, update::UpdateCommand,
+    Command, exec::ExecCommand, get::GetCommand, info::InfoCommand, init::InitCommand,
+    list::ListCommand, rekey::RekeyCommand, remove::RemoveCommand, set::SetCommand,
+    update::UpdateCommand,
 };
 
 #[derive(Parser)]
@@ -30,6 +31,7 @@ pub enum Commands {
     Remove(RemoveCommand),
     Info(InfoCommand),
     Rekey(RekeyCommand),
+    Exec(ExecCommand),
 }
 
 impl Command for Commands {
@@ -43,6 +45,7 @@ impl Command for Commands {
             Commands::Remove(cmd) => cmd.run(store),
             Commands::Info(cmd) => cmd.run(store),
             Commands::Rekey(cmd) => cmd.run(store),
+            Commands::Exec(cmd) => cmd.run(store),
         }
     }
 }
