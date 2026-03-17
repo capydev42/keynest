@@ -1,24 +1,94 @@
 # Keynest
 
-[![crates.io](https://img.shields.io/crates/v/keynest.svg)](https://crates.io/crates/keynest)
-[![docs.rs](https://img.shields.io/docsrs/keynest)](https://docs.rs/keynest)
-[![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](https://opensource.org/licenses/MIT)
-[![CI](https://github.com/capydev42/keynest/actions/workflows/ci.yml/badge.svg)](https://github.com/capydev42/keynest/actions/workflows/ci.yml)
+Stop committing secrets by accident.
 
-Simple, offline, cross-platform secrets manager written in Rust.
+A simple, offline secrets manager that replaces `.env` files.
 
-Store your secrets securely in an encrypted local file — no cloud, no server, no daemon.
+Run any command with encrypted secrets — no cloud, no setup.
 
 ---
 
 ## Why Keynest?
 
-Keynest fills the gap between insecure `.env` files and heavyweight secrets managers.
+| Problem | Solution |
+|---------|----------|
+| `.env` files leak secrets | Encrypted local storage |
+| Vault is overkill | Single binary, no setup |
+| 1Password CLI requires account | Local, no account needed |
+| Secrets in code/prompts | Runtime injection |
 
-- **Strong security** without infrastructure (Argon2id + ChaCha20Poly1305)
-- **Offline-first** secrets management
-- **Portability** across machines and environments
-- **Simple CLI** that works well with scripts and automation
+---
+
+## Run Commands with Secrets
+
+Inject secrets into any process as environment variables:
+
+```bash
+keynest exec -- docker compose up
+```
+
+→ your app receives secrets via environment variables
+
+Works with:
+- Docker
+- Node.js
+- Python
+- shell scripts
+- CI pipelines
+- AI agents
+
+No `.env` files needed.
+
+---
+
+## Philosophy
+
+- No cloud
+- No accounts
+- No background services
+- Just a simple encrypted file
+
+Your secrets stay on your machine.
+
+---
+
+## Try it in 30 seconds
+
+```bash
+keynest init
+keynest set api_key test123
+keynest exec -- printenv API_KEY
+```
+
+Output: `test123`
+
+---
+
+## AI & Agent Usage
+
+Use Keynest as a secure local secret store for AI agents.
+
+```bash
+keynest exec -- python agent.py
+```
+
+Access secrets via environment variables (e.g. `API_KEY`):
+
+```python
+import os
+api_key = os.environ["API_KEY"]
+```
+
+Keeps secrets out of:
+- source code
+- logs
+- prompts
+- LLM context
+
+Works well with:
+- LangChain
+- AutoGPT
+- custom agents
 
 ---
 
@@ -72,7 +142,8 @@ keynest remove github_token
 
 # Run command with secrets as environment variables
 keynest exec -- docker compose up
-keynest exec --only API_KEY -- curl api.example.com
+keynest exec --only API_KEY -- \
+  curl -H "Authorization: Bearer $API_KEY" https://api.example.com
 keynest exec --prefix MY_ -- env
 keynest exec --print
 
@@ -105,18 +176,23 @@ All commands support `--json` for structured output (get, list, info).
 
 ---
 
-## Features
+## Security
 
-### Security
-- **Encryption:** ChaCha20-Poly1305 (AEAD)
 - **Key Derivation:** Argon2id with configurable parameters
 - **Secure Memory:** Keys and passwords are zeroized after use
+- **Encryption:** XChaCha20-Poly1305 AEAD
 
-### CLI Options
+### Security Notes
+
+- Uses well-established cryptographic primitives (Argon2id, XChaCha20-Poly1305)
+- No network access
+- No telemetry
+- Zero-config — works out of the box
+
+---
+
+## CLI Options
 - `--store <path>` - Specify custom keystore location
-- `--json` - Output in JSON format (for get, list, info commands)
-- `--clip` - Copy secret to clipboard (with auto-clear)
-- `--timeout <seconds>` - Clipboard auto-clear delay (default: 15, for use with --clip)
 
 ### KDF Options (for init/rekey)
 - `--argon-mem <kb>` - Memory cost in KiB (default: 65536)
@@ -131,95 +207,9 @@ Keynest accepts passwords via:
 
 ---
 
-## Library Usage
+## Star History
 
-Add to your `Cargo.toml`:
-
-```toml
-[dependencies]
-keynest = "0.4"
-```
-
-### Simple example (default storage location)
-
-```rust
-use keynest::Keynest;
-use anyhow::Result;
-use zeroize::Zeroizing;
-
-fn main() -> Result<()> {
-    let password = Zeroizing::new(String::from("my-password"));
-    
-    // Create new keystore
-    let mut kn = Keynest::init(password.clone())?;
-    
-    // Store secrets
-    kn.set("api_token", "secret123")?;
-    kn.save()?;
-    
-    // Later: reopen
-    let kn = Keynest::open(password)?;
-    assert_eq!(kn.get("api_token"), Some("secret123"));
-    
-    Ok(())
-}
-```
-
-### Advanced example (custom storage location)
-
-```rust
-use keynest::{Keynest, KdfParams, Storage};
-use anyhow::Result;
-use zeroize::Zeroizing;
-
-fn main() -> Result<()> {
-    let storage = Storage::new("/path/to/keystore.db");
-    let password = Zeroizing::new(String::from("my-password"));
-    
-    // Create new keystore with custom KDF parameters
-    let kdf = KdfParams::default();
-    let mut kn = Keynest::init_with_storage_and_kdf(password, storage, kdf)?;
-    
-    // Store secrets
-    kn.set("api_token", "secret123")?;
-    kn.save()?;
-    
-    // Later: reopen
-    let kn = Keynest::open_with_storage(Zeroizing::new(String::from("my-password")), storage)?;
-    assert_eq!(kn.get("api_token"), Some("secret123"));
-    
-    Ok(())
-}
-```
-
----
-
-## Storage Location
-
-Default keystore locations by OS:
-- **Linux:** `~/.local/share/keynest/.keynest.db`
-- **macOS:** `~/Library/Application Support/keynest/.keynest.db`
-- **Windows:** `%APPDATA%\keynest\.keynest.db`
-
-Use `--store <path>` to override.
-
----
-
-## Development
-
-```bash
-# Build
-cargo build
-
-# Test
-cargo test
-
-# Format
-cargo fmt
-
-# Lint
-cargo clippy -- -D warnings
-```
+If you find Keynest useful, consider giving it a star ⭐
 
 ---
 
