@@ -767,3 +767,700 @@ fn exec_only_specific_keys() {
         .stdout(predicate::str::contains("value1"))
         .stdout(predicate::str::contains("KEY2").not());
 }
+
+#[test]
+fn export_json_to_stdout() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["set", "api_key", "secret123"])
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["export"])
+        .assert()
+        .success()
+        .stdout(is_valid_json())
+        .stdout(predicate::str::contains("api_key"))
+        .stdout(predicate::str::contains("secret123"));
+}
+
+#[test]
+fn export_env_format_to_file() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+    let export_file = dir.path().join("secrets.env");
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["set", "DB_HOST", "localhost"])
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["export", "--format", "env"])
+        .arg(&export_file)
+        .assert()
+        .success();
+
+    let content = std::fs::read_to_string(&export_file).unwrap();
+    assert!(content.contains("DB_HOST=localhost"));
+}
+
+#[test]
+fn export_json_format_to_file() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+    let export_file = dir.path().join("secrets.json");
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["set", "api_key", "abc123"])
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["export"])
+        .arg(&export_file)
+        .assert()
+        .success();
+
+    let content = std::fs::read_to_string(&export_file).unwrap();
+    assert!(content.contains("\"api_key\""));
+    assert!(content.contains("abc123"));
+}
+
+#[test]
+fn export_format_auto_detected_from_extension() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+    let export_file = dir.path().join("exported.env");
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["set", "KEY1", "val1"])
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("export")
+        .arg(&export_file)
+        .assert()
+        .success();
+
+    let content = std::fs::read_to_string(&export_file).unwrap();
+    assert!(content.contains("KEY1=val1"));
+}
+
+#[test]
+fn export_with_prefix() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["set", "API_KEY", "secret1"])
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["set", "DB_PASS", "secret2"])
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["export", "--prefix", "API_"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("API_KEY"))
+        .stdout(predicate::str::contains("secret1"))
+        .stdout(predicate::str::contains("DB_PASS").not());
+}
+
+#[test]
+fn export_empty_store() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("export")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("No secrets to export"));
+}
+
+#[test]
+fn import_env_file() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+    let import_file = dir.path().join("import.env");
+
+    std::fs::write(&import_file, "API_KEY=secret123\nDB_PASS=postgres").unwrap();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("import")
+        .arg(&import_file)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Imported 2 secret(s)"));
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["get", "API_KEY"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("secret123"));
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["get", "DB_PASS"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("postgres"));
+}
+
+#[test]
+fn import_json_file() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+    let import_file = dir.path().join("import.json");
+
+    std::fs::write(&import_file, r#"{"api_key": "abc123", "token": "xyz789"}"#).unwrap();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("import")
+        .arg(&import_file)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Imported 2 secret(s)"));
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["get", "api_key"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("abc123"));
+}
+
+#[test]
+fn import_explicit_format() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+    let import_file = dir.path().join("secrets.txt");
+
+    std::fs::write(&import_file, "KEY=value\nKEY2=val2").unwrap();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["import", "--format", "env"])
+        .arg(&import_file)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Imported 2 secret(s)"));
+}
+
+#[test]
+fn import_skips_existing_keys_without_overwrite() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+    let import_file = dir.path().join("import.env");
+
+    std::fs::write(&import_file, "EXISTING=newvalue\nNEWKEY=newvalue").unwrap();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["set", "EXISTING", "oldvalue"])
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("import")
+        .arg(&import_file)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Imported 1 secret(s)"))
+        .stdout(predicate::str::contains("Skipped 1 existing"));
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["get", "EXISTING"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("oldvalue"));
+}
+
+#[test]
+fn import_overwrites_existing_keys() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+    let import_file = dir.path().join("import.env");
+
+    std::fs::write(&import_file, "MYKEY=updated").unwrap();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["set", "MYKEY", "original"])
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["import", "--overwrite"])
+        .arg(&import_file)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Imported 1 secret(s)"));
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["get", "MYKEY"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("updated"));
+}
+
+#[test]
+fn import_unknown_format_fails() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+    let import_file = dir.path().join("secrets.yaml");
+
+    std::fs::write(&import_file, "key: value").unwrap();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("import")
+        .arg(&import_file)
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("cannot detect format"));
+}
+
+#[test]
+fn import_empty_file() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+    let import_file = dir.path().join("empty.env");
+
+    std::fs::write(&import_file, "").unwrap();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("import")
+        .arg(&import_file)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("No secrets found"));
+}
+
+#[test]
+fn import_env_with_comments() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+    let import_file = dir.path().join("with_comments.env");
+
+    std::fs::write(
+        &import_file,
+        "# This is a comment\nKEY1=value1\n# Another comment\nKEY2=value2",
+    )
+    .unwrap();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("import")
+        .arg(&import_file)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Imported 2 secret(s)"));
+}
+
+#[test]
+fn import_env_with_quoted_values() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+    let import_file = dir.path().join("quoted.env");
+
+    std::fs::write(&import_file, "API_KEY=\"abc 123\"\nPASSWORD='pa$$word'").unwrap();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("import")
+        .arg(&import_file)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Imported 2 secret(s)"));
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["get", "API_KEY"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("abc 123"));
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["get", "PASSWORD"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("pa$$word"));
+}
+
+#[test]
+fn export_env_escapes_special_characters() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+    let export_file = dir.path().join("escaped.env");
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["set", "KEY", "value with spaces"])
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["export", "--format", "env"])
+        .arg(&export_file)
+        .assert()
+        .success();
+
+    let content = std::fs::read_to_string(&export_file).unwrap();
+    assert!(content.contains("\"value with spaces\""));
+}
+
+#[test]
+fn export_import_roundtrip() {
+    let dir = tempdir().unwrap();
+    let store1 = dir.path().join("test1.db");
+    let store2 = dir.path().join("test2.db");
+    let export_file = dir.path().join("roundtrip.env");
+
+    // Create first keystore with secrets
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store1)
+        .arg("init")
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store1)
+        .args(["set", "API_KEY", "secret123"])
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store1)
+        .args(["set", "DB_PASS", "postgres"])
+        .assert()
+        .success();
+
+    // Export from first keystore
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store1)
+        .args(["export", "--format", "env"])
+        .arg(&export_file)
+        .assert()
+        .success();
+
+    // Create second keystore
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store2)
+        .arg("init")
+        .assert()
+        .success();
+
+    // Import into second keystore
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store2)
+        .arg("import")
+        .arg(&export_file)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Imported 2 secret(s)"));
+
+    // Verify secrets in second keystore
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store2)
+        .args(["get", "API_KEY"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("secret123"));
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store2)
+        .args(["get", "DB_PASS"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("postgres"));
+}
+
+#[test]
+fn import_with_prefix() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+    let import_file = dir.path().join("prefix.env");
+
+    std::fs::write(
+        &import_file,
+        "API_KEY=secret1\nDB_PASS=secret2\nOTHER_KEY=secret3",
+    )
+    .unwrap();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["import", "--prefix", "API_"])
+        .arg(&import_file)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Imported 1 secret(s)"))
+        .stdout(predicate::str::contains("Filtered 2 secret(s)"));
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["get", "API_KEY"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("secret1"));
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["get", "DB_PASS"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("not found"));
+}
