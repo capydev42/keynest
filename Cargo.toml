@@ -18,6 +18,7 @@ chrono = "0.4.43"
 clap = {version = "4.5.55", features = ["derive", "env"]}
 ctrlc = "3.2"
 directories = "6.0.0"
+dotenvy = "0.15.7"
 getrandom = "0.4.1"
 rpassword = "7.4.0"
 serde = {version = "1.0.228", features = ["derive"]}

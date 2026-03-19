@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Added
+- `import` command to import secrets from .env or JSON files
+- `export` command to export secrets to .env or JSON files
+- `--format` option for explicit format specification (env/json)
+- `--prefix` option for import and export to filter by key prefix
+- `--overwrite` option for import to replace existing secrets
+- Automatic format detection from file extension
+- ENV escaping for export with special characters
+- dotenvy crate for proper .env parsing (quotes, escaping, comments)
+
+---
+
 ## [0.4.1] - 2026-03-17
 
 ### Added

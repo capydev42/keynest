@@ -99,6 +99,10 @@ Works well with:
 
 ## Installation
 
+### Pre-built binaries
+
+Download the latest release from GitHub: [keynest/releases/latest](https://github.com/capydev42/keynest/releases/latest)
+
 ### From crates.io
 
 ```bash
@@ -158,6 +162,13 @@ keynest info
 # Change password (and optionally KDF parameters)
 keynest rekey
 keynest rekey --argon-mem 131072  # upgrade memory cost
+
+# Import/Export secrets
+keynest import .env
+keynest import secrets.json
+keynest import --overwrite .env
+keynest export --format env
+keynest export secrets.json
 ```
 
 ---
@@ -176,6 +187,8 @@ keynest rekey --argon-mem 131072  # upgrade memory cost
 | `exec -- <cmd>` | Run command with secrets as environment variables |
 | `info` | Show keystore information (KDF params, creation date) |
 | `rekey` | Change password and/or KDF parameters |
+| `import <file>` | Import secrets from file (env or json) |
+| `export [file]` | Export secrets to file or stdout |
 
 All commands support `--json` for structured output (get, list, info).
 
