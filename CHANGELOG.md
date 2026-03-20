@@ -19,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ENV escaping for export with special characters
 - dotenvy crate for proper .env parsing (quotes, escaping, comments)
 
+### CI/Release
+- Added static Linux binary (x86_64-unknown-linux-musl)
+- SHA256 checksums for all release artifacts
+- Checksums.txt included in releases
+- Checksums printed by platform in CI logs
+- Improved artifact handling and release process
+
 ---
 
 ## [0.4.1] - 2026-03-17
