@@ -94,27 +94,25 @@ jobs:
 
       - name: Flatten artifacts
         run: |
-          mkdir flat
-          find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" \) -exec cp {} flat/ \;
-          mv flat/* artifacts/ 2>/dev/null || true
-          rm -rf flat
+          cp artifacts/*/* artifacts/
+          find artifacts -maxdepth 1 -type d ! -name artifacts -exec rm -rf {} \;
 
       - name: Generate checksums
         run: |
           cd artifacts
-          sha256sum *.tar.gz *.zip > checksums.txt
+          find . -type f \( -name "*.tar.gz" -o -name "*.zip" \) -exec sha256sum {} \; | sed 's|./||' > checksums.txt
 
       - name: Print checksums
         run: |
           cd artifacts
-          sha256sum *.tar.gz *.zip
+          sha256sum *.tar.gz *.zip 2>/dev/null || true
 
       - name: Print checksums by platform
         run: |
           cd artifacts
-          echo "=== Linux ===" && sha256sum *linux*.tar.gz
-          echo "=== macOS ===" && sha256sum *apple-darwin.tar.gz
-          echo "=== Windows ===" && sha256sum *.zip
+          echo "=== Linux ===" && sha256sum *linux*.tar.gz 2>/dev/null || true
+          echo "=== macOS ===" && sha256sum *apple-darwin.tar.gz 2>/dev/null || true
+          echo "=== Windows ===" && sha256sum *.zip 2>/dev/null || true
 
       - name: Create release
         uses: softprops/action-gh-release@v2
