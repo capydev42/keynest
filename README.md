@@ -7,57 +7,37 @@
 
 Stop committing secrets by accident.
 
-A simple, offline secrets manager that replaces `.env` files.
-
-Run any command with encrypted secrets — no cloud, no setup.
-
----
-
-## Why Keynest?
-
-| Problem | Solution |
-|---------|----------|
-| `.env` files leak secrets | Encrypted local storage |
-| Vault is overkill | Single binary, no setup |
-| 1Password CLI requires account | Local, no account needed |
-| Secrets in code/prompts | Runtime injection |
-
----
-
-## Run Commands with Secrets
-
-Inject secrets into any process as environment variables:
+Inject secrets into any command — no cloud, no setup.
 
 ```bash
 keynest exec -- docker compose up
 ```
 
-→ your app receives secrets via environment variables
+Your app receives secrets via environment variables.
 
-Works with:
-- Docker
-- Node.js
-- Python
-- shell scripts
-- CI pipelines
-- AI agents
+## Table of Contents
 
-No `.env` files needed.
-
----
-
-## Philosophy
-
-- No cloud
-- No accounts
-- No background services
-- Just a simple encrypted file
-
-Your secrets stay on your machine.
+- [Why Keynest?](#why-keynest)
+- [Quick Start](#quick-start)
+- [Installation](#installation)
+- [CLI Commands](#cli-commands)
+- [AI \& Agent Usage](#ai--agent-usage)
+- [Security](#security)
 
 ---
 
-## Try it in 30 seconds
+## Why Keynest?
+
+| Instead of | You get |
+|-----------|--------|
+| `.env` files | Encrypted local secrets |
+| Vault | Zero setup |
+| 1Password CLI | No account |
+| Hardcoded secrets | Runtime injection |
+
+---
+
+## Quick Start
 
 ```bash
 keynest init
@@ -99,6 +79,13 @@ Works well with:
 
 ## Installation
 
+### Homebrew
+
+```bash
+brew tap capydev42/keynest
+brew install keynest
+```
+
 ### Pre-built binaries
 
 Download the latest release from GitHub: [keynest/releases/latest](https://github.com/capydev42/keynest/releases/latest)
@@ -124,7 +111,7 @@ cargo build --release
 
 ---
 
-## Quick Start
+## Usage
 
 ```bash
 # Initialize a new keystore
