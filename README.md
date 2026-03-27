@@ -47,6 +47,8 @@ keynest exec -- printenv API_KEY
 
 Output: `test123`
 
+![Demo](docs/keynest-demo.gif)
+
 ---
 
 ## AI & Agent Usage
