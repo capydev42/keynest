@@ -1,6 +1,6 @@
 [package]
 name = "keynest"
-version = "0.4.2"
+version = "0.4.3"
 edition = "2024"
 description = "Simple, offline, cross-platform secrets manager written in Rust"
 repository = "https://github.com/capydev42/keynest"
@@ -20,7 +20,7 @@ ctrlc = "3.2"
 directories = "6.0.0"
 dotenvy = "0.15.7"
 getrandom = "0.4.1"
-rpassword = "7.4.0"
+rpassword = "7.5.0"
 serde = {version = "1.0.228", features = ["derive"]}
 serde_json = "1.0.149"
 zeroize = "1.8.2"
