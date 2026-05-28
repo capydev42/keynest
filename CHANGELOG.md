@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.3] - 2026-05-28
+
+### Security
+- Updated `rpassword` from 7.4.0 to 7.5.3 to fix partial password reveal on process interrupt (CVE in rpassword < 7.5.0)
+
+---
+
 ## [0.4.2] - 2026-03-20
 
 ### Added
