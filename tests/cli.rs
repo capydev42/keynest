@@ -921,6 +921,49 @@ fn export_env_format_to_file() {
     assert!(content.contains("DB_HOST=localhost"));
 }
 
+#[cfg(unix)]
+#[test]
+fn export_file_has_0600_permissions() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+    let export_file = dir.path().join("secrets.env");
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["set", "DB_HOST", "localhost"])
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["export", "--format", "env"])
+        .arg(&export_file)
+        .assert()
+        .success();
+
+    // Exported plaintext secrets must not be world/group readable.
+    let mode = std::fs::metadata(&export_file)
+        .unwrap()
+        .permissions()
+        .mode()
+        & 0o777;
+    assert_eq!(mode, 0o600, "exported file should be 0600");
+}
+
 #[test]
 fn export_json_format_to_file() {
     let dir = tempdir().unwrap();

@@ -2,7 +2,7 @@ use anyhow::Result;
 use clap::{Args, ValueEnum};
 use std::collections::HashMap;
 use std::fmt::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use super::super::auth;
@@ -82,7 +82,7 @@ impl Command for ExportCommand {
             ExportFormat::Env => {
                 let output = format_as_env(&kn, &filtered_keys)?;
                 if let Some(ref path) = self.file {
-                    std::fs::write(path, &output)?;
+                    write_file_secure(path, output.as_bytes())?;
                 } else {
                     println!("{output}");
                 }
@@ -90,7 +90,7 @@ impl Command for ExportCommand {
             ExportFormat::Json => {
                 let output = format_as_json(&kn, &filtered_keys)?;
                 if let Some(ref path) = self.file {
-                    std::fs::write(path, &output)?;
+                    write_file_secure(path, output.as_bytes())?;
                 } else {
                     println!("{output}");
                 }
@@ -99,6 +99,35 @@ impl Command for ExportCommand {
 
         Ok(ExitCode::SUCCESS)
     }
+}
+
+/// Writes `data` to `path`, restricting the file to owner-only (0600) on Unix so
+/// exported plaintext secrets are not world/group readable (mirrors the keystore's
+/// permission hardening in `storage.rs`).
+#[cfg(unix)]
+fn write_file_secure(path: &Path, data: &[u8]) -> Result<()> {
+    use std::fs::{OpenOptions, Permissions};
+    use std::io::Write as _;
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(path)?;
+
+    // Tighten before writing, in case the file already existed with looser modes.
+    file.set_permissions(Permissions::from_mode(0o600))?;
+    file.write_all(data)?;
+
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn write_file_secure(path: &Path, data: &[u8]) -> Result<()> {
+    std::fs::write(path, data)?;
+    Ok(())
 }
 
 fn format_as_env(kn: &Keynest, keys: &[&String]) -> Result<String> {

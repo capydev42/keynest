@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Security
+- Files created by `export` are now written with `0600` permissions on Unix, so exported plaintext secrets are not world/group readable
+
+---
+
 ## [0.4.4] - 2026-07-21
 
 ### Fixed
