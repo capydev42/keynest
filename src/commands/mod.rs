@@ -1,8 +1,9 @@
 use anyhow::Result;
 use std::path::PathBuf;
+use std::process::ExitCode;
 
 pub trait Command {
-    fn run(self, store: Option<PathBuf>) -> Result<()>;
+    fn run(self, store: Option<PathBuf>) -> Result<ExitCode>;
 }
 
 pub mod common;

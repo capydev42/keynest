@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::Args;
+use std::process::ExitCode;
 
 use super::super::auth;
 use crate::commands::Command;
@@ -33,7 +34,7 @@ pub struct GetCommand {
 }
 
 impl Command for GetCommand {
-    fn run(self, store: Option<std::path::PathBuf>) -> Result<()> {
+    fn run(self, store: Option<std::path::PathBuf>) -> Result<ExitCode> {
         if self.timeout == 0 {
             anyhow::bail!("timeout must be greater than 0");
         }
@@ -54,10 +55,10 @@ impl Command for GetCommand {
             }
             None => {
                 eprintln!("key not found: {}", self.key);
-                std::process::exit(1);
+                return Ok(ExitCode::from(1));
             }
         }
 
-        Ok(())
+        Ok(ExitCode::SUCCESS)
     }
 }

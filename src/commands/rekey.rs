@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::Args;
+use std::process::ExitCode;
 
 use super::super::auth;
 use crate::commands::Command;
@@ -17,7 +18,7 @@ pub struct RekeyCommand {
 }
 
 impl Command for RekeyCommand {
-    fn run(self, store: Option<std::path::PathBuf>) -> Result<()> {
+    fn run(self, store: Option<std::path::PathBuf>) -> Result<ExitCode> {
         let password = auth::read_password()?;
         let storage = resolve_storage(store)?;
         let mut kn = Keynest::open_with_storage(password, storage)?;
@@ -28,6 +29,6 @@ impl Command for RekeyCommand {
 
         println!("store successfully rekeyed");
 
-        Ok(())
+        Ok(ExitCode::SUCCESS)
     }
 }

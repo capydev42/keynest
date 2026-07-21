@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap::Args;
 use std::path::PathBuf;
+use std::process::ExitCode;
 
 use super::super::auth;
 use crate::commands::Command;
@@ -30,7 +31,7 @@ pub struct SetCommand {
 }
 
 impl Command for SetCommand {
-    fn run(self, store: Option<std::path::PathBuf>) -> Result<()> {
+    fn run(self, store: Option<std::path::PathBuf>) -> Result<ExitCode> {
         if self.prompt && self.value.is_some() {
             anyhow::bail!("cannot use value argument together with --prompt");
         }
@@ -65,6 +66,6 @@ impl Command for SetCommand {
         kn.save()?;
         println!("stored secret '{}'", self.key);
 
-        Ok(())
+        Ok(ExitCode::SUCCESS)
     }
 }
