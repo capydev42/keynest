@@ -432,6 +432,45 @@ fn set_with_file() {
 }
 
 #[test]
+fn set_with_file_strips_trailing_newline() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+    let secret_file = dir.path().join("secret.txt");
+
+    // Simulate a file saved by an editor that appends a trailing newline.
+    std::fs::write(&secret_file, "secret_from_file\n").unwrap();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["set", "mykey", "--file"])
+        .arg(&secret_file)
+        .assert()
+        .success();
+
+    // JSON output reveals the exact stored value: it must be the clean string
+    // with no trailing newline (which would serialize as an escaped "\n").
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["get", "mykey", "--json"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"secret_from_file\""))
+        .stdout(predicate::str::contains("secret_from_file\\n").not());
+}
+
+#[test]
 fn set_missing_value_fails() {
     let dir = tempdir().unwrap();
     let store = dir.path().join("test.db");
