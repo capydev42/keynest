@@ -11,6 +11,37 @@ fn is_valid_json() -> impl predicates::Predicate<str> {
 }
 
 #[test]
+fn init_invalid_argon_params_fail_before_password() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+
+    // No password provided: if KDF validation runs first (fail-fast), the argon error
+    // surfaces rather than "No password provided".
+    bin()
+        .arg("--store")
+        .arg(&store)
+        .args(["init", "--argon-mem", "4"]) // below the 8 KiB minimum
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("argon2 memory cost too low"));
+}
+
+#[test]
+fn get_missing_store_fails_before_password() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("missing.db");
+
+    // No password provided: fail-fast means we report the missing store, not prompt.
+    bin()
+        .arg("--store")
+        .arg(&store)
+        .args(["get", "anykey"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("does not exist"));
+}
+
+#[test]
 fn init_creates_store_file() {
     let dir = tempdir().unwrap();
     let store = dir.path().join("test.db");

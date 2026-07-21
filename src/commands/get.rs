@@ -4,7 +4,9 @@ use std::process::ExitCode;
 
 use super::super::auth;
 use crate::commands::Command;
-use crate::commands::common::{copy_to_clipboard, print_json, print_plain, resolve_storage};
+use crate::commands::common::{
+    copy_to_clipboard, print_json, print_plain, resolve_existing_storage,
+};
 use keynest::Keynest;
 
 #[derive(Args)]
@@ -39,8 +41,8 @@ impl Command for GetCommand {
             anyhow::bail!("timeout must be greater than 0");
         }
 
+        let storage = resolve_existing_storage(store)?;
         let password = auth::read_password()?;
-        let storage = resolve_storage(store)?;
         let kn = Keynest::open_with_storage(password, storage)?;
 
         match kn.get(&self.key) {

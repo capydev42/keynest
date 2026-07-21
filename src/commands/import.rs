@@ -7,7 +7,7 @@ use std::process::ExitCode;
 
 use super::super::auth;
 use crate::commands::Command;
-use crate::commands::common::resolve_storage;
+use crate::commands::common::resolve_existing_storage;
 use dotenvy::from_read_iter as parse_env_dotenv;
 use keynest::Keynest;
 
@@ -85,8 +85,8 @@ impl Command for ImportCommand {
             return Ok(ExitCode::SUCCESS);
         }
 
+        let storage = resolve_existing_storage(store)?;
         let password = auth::read_password()?;
-        let storage = resolve_storage(store)?;
         let mut kn = Keynest::open_with_storage(password, storage)?;
 
         let mut imported = 0;

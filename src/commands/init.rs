@@ -20,9 +20,9 @@ pub struct InitCommand {
 
 impl Command for InitCommand {
     fn run(self, store: Option<std::path::PathBuf>) -> Result<ExitCode> {
-        let password = auth::read_password()?;
         let kdf = self.argon2.to_kdf_params()?;
         let storage = resolve_storage(store)?;
+        let password = auth::read_password()?;
 
         Keynest::init_with_storage_and_kdf(password, storage, kdf)?;
         println!("keystore initialized");

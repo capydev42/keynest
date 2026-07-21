@@ -4,7 +4,7 @@ use std::process::ExitCode;
 
 use super::super::auth;
 use crate::commands::Command;
-use crate::commands::common::{print_json, resolve_storage};
+use crate::commands::common::{print_json, resolve_existing_storage};
 use keynest::Keynest;
 
 #[derive(Args)]
@@ -29,8 +29,8 @@ pub struct ListCommand {
 
 impl Command for ListCommand {
     fn run(self, store: Option<std::path::PathBuf>) -> Result<ExitCode> {
+        let storage = resolve_existing_storage(store)?;
         let password = auth::read_password()?;
-        let storage = resolve_storage(store)?;
         let kn = Keynest::open_with_storage(password, storage)?;
 
         if self.json {

@@ -4,7 +4,7 @@ use std::process::ExitCode;
 
 use super::super::auth;
 use crate::commands::Command;
-use crate::commands::common::resolve_storage;
+use crate::commands::common::resolve_existing_storage;
 use keynest::Keynest;
 
 #[derive(Args)]
@@ -21,8 +21,8 @@ pub struct UpdateCommand {
 
 impl Command for UpdateCommand {
     fn run(self, store: Option<std::path::PathBuf>) -> Result<ExitCode> {
+        let storage = resolve_existing_storage(store)?;
         let password = auth::read_password()?;
-        let storage = resolve_storage(store)?;
         let mut kn = Keynest::open_with_storage(password, storage)?;
         kn.update(&self.key, &self.new_value)?;
         kn.save()?;
