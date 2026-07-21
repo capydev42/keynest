@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
+## [0.4.4] - 2026-07-21
 
 ### Fixed
 - `set --file` stored the file's trailing newline, leaking a stray `\n` into `get`, `exec`, and `export` output; a single trailing newline (`\n` or `\r\n`) is now stripped before storing
