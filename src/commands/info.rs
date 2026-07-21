@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::Args;
+use std::process::ExitCode;
 
 use super::super::auth;
 use crate::commands::Command;
@@ -18,7 +19,7 @@ pub struct InfoCommand {
 }
 
 impl Command for InfoCommand {
-    fn run(self, store: Option<std::path::PathBuf>) -> Result<()> {
+    fn run(self, store: Option<std::path::PathBuf>) -> Result<ExitCode> {
         let password = auth::read_password()?;
         let storage = resolve_storage(store)?;
         let kn = Keynest::open_with_storage(password, storage.clone())?;
@@ -30,6 +31,6 @@ impl Command for InfoCommand {
             println!("{info}");
         }
 
-        Ok(())
+        Ok(ExitCode::SUCCESS)
     }
 }

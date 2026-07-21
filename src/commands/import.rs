@@ -3,6 +3,7 @@ use clap::{Args, ValueEnum};
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::path::PathBuf;
+use std::process::ExitCode;
 
 use super::super::auth;
 use crate::commands::Command;
@@ -55,7 +56,7 @@ pub struct ImportCommand {
 }
 
 impl Command for ImportCommand {
-    fn run(self, store: Option<PathBuf>) -> Result<()> {
+    fn run(self, store: Option<PathBuf>) -> Result<ExitCode> {
         let format = self
             .format
             .or_else(|| {
@@ -81,7 +82,7 @@ impl Command for ImportCommand {
 
         if secrets.is_empty() {
             println!("No secrets found in file");
-            return Ok(());
+            return Ok(ExitCode::SUCCESS);
         }
 
         let password = auth::read_password()?;
@@ -123,6 +124,6 @@ impl Command for ImportCommand {
             println!("Filtered {filtered} secret(s) by prefix");
         }
 
-        Ok(())
+        Ok(ExitCode::SUCCESS)
     }
 }

@@ -808,6 +808,52 @@ fn exec_only_specific_keys() {
 }
 
 #[test]
+fn exec_propagates_child_exit_code() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    // The child's exit code must be forwarded verbatim.
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["exec", "--", "sh", "-c", "exit 3"])
+        .assert()
+        .code(3);
+}
+
+#[test]
+fn get_missing_key_exits_with_code_1() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["get", "nonexistent"])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains("key not found"));
+}
+
+#[test]
 fn export_json_to_stdout() {
     let dir = tempdir().unwrap();
     let store = dir.path().join("test.db");

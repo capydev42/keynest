@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::Args;
+use std::process::ExitCode;
 
 use super::super::auth;
 use crate::commands::common::resolve_storage;
@@ -58,7 +59,7 @@ pub struct ExecCommand {
 }
 
 impl crate::commands::Command for ExecCommand {
-    fn run(self, store: Option<std::path::PathBuf>) -> Result<()> {
+    fn run(self, store: Option<std::path::PathBuf>) -> Result<ExitCode> {
         let password = auth::read_password()?;
         let storage = resolve_storage(store)?;
         let kn = Keynest::open_with_storage(password, storage)?;
@@ -79,7 +80,7 @@ impl crate::commands::Command for ExecCommand {
 
                 println!("{}={}", env_key, shell_escape(secret));
             }
-            return Ok(());
+            return Ok(ExitCode::SUCCESS);
         }
 
         if !self.print && self.cmd.is_empty() {
@@ -101,6 +102,6 @@ impl crate::commands::Command for ExecCommand {
 
         let status = cmd.status()?;
 
-        std::process::exit(status.code().unwrap_or(1));
+        Ok(ExitCode::from(status.code().unwrap_or(1) as u8))
     }
 }

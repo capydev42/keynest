@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::Args;
+use std::process::ExitCode;
 
 use super::super::auth;
 use crate::commands::Command;
@@ -27,7 +28,7 @@ pub struct ListCommand {
 }
 
 impl Command for ListCommand {
-    fn run(self, store: Option<std::path::PathBuf>) -> Result<()> {
+    fn run(self, store: Option<std::path::PathBuf>) -> Result<ExitCode> {
         let password = auth::read_password()?;
         let storage = resolve_storage(store)?;
         let kn = Keynest::open_with_storage(password, storage)?;
@@ -54,7 +55,7 @@ impl Command for ListCommand {
 
             if entries.is_empty() {
                 println!("No secrets stored.");
-                return Ok(());
+                return Ok(ExitCode::SUCCESS);
             }
 
             let key_width = entries
@@ -83,6 +84,6 @@ impl Command for ListCommand {
             }
         }
 
-        Ok(())
+        Ok(ExitCode::SUCCESS)
     }
 }

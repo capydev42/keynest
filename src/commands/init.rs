@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::Args;
+use std::process::ExitCode;
 
 use super::super::auth;
 use crate::commands::Command;
@@ -18,7 +19,7 @@ pub struct InitCommand {
 }
 
 impl Command for InitCommand {
-    fn run(self, store: Option<std::path::PathBuf>) -> Result<()> {
+    fn run(self, store: Option<std::path::PathBuf>) -> Result<ExitCode> {
         let password = auth::read_password()?;
         let kdf = self.argon2.to_kdf_params()?;
         let storage = resolve_storage(store)?;
@@ -26,6 +27,6 @@ impl Command for InitCommand {
         Keynest::init_with_storage_and_kdf(password, storage, kdf)?;
         println!("keystore initialized");
 
-        Ok(())
+        Ok(ExitCode::SUCCESS)
     }
 }

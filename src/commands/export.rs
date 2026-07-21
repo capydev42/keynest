@@ -3,6 +3,7 @@ use clap::{Args, ValueEnum};
 use std::collections::HashMap;
 use std::fmt::Write;
 use std::path::PathBuf;
+use std::process::ExitCode;
 
 use super::super::auth;
 use crate::commands::Command;
@@ -49,7 +50,7 @@ pub struct ExportCommand {
 }
 
 impl Command for ExportCommand {
-    fn run(self, store: Option<PathBuf>) -> Result<()> {
+    fn run(self, store: Option<PathBuf>) -> Result<ExitCode> {
         let password = auth::read_password()?;
         let storage = resolve_storage(store)?;
         let kn = Keynest::open_with_storage(password, storage)?;
@@ -64,7 +65,7 @@ impl Command for ExportCommand {
 
         if filtered_keys.is_empty() {
             println!("No secrets to export");
-            return Ok(());
+            return Ok(ExitCode::SUCCESS);
         }
 
         let format = self
@@ -96,7 +97,7 @@ impl Command for ExportCommand {
             }
         }
 
-        Ok(())
+        Ok(ExitCode::SUCCESS)
     }
 }
 

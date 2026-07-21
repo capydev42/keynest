@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - `set --file` stored the file's trailing newline, leaking a stray `\n` into `get`, `exec`, and `export` output; a single trailing newline (`\n` or `\r\n`) is now stripped before storing
 
+### Security
+- Zeroize the derived key on exit for `get` and `exec` by replacing `std::process::exit` with proper exit-code propagation (`Command::run` now returns `ExitCode`), so `Drop for Keynest` always runs
+
 ---
 
 ## [0.4.3] - 2026-05-28

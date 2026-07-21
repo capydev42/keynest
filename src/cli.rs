@@ -37,7 +37,7 @@ pub enum Commands {
 }
 
 impl Command for Commands {
-    fn run(self, store: Option<std::path::PathBuf>) -> anyhow::Result<()> {
+    fn run(self, store: Option<std::path::PathBuf>) -> anyhow::Result<std::process::ExitCode> {
         match self {
             Commands::Init(cmd) => cmd.run(store),
             Commands::Get(cmd) => cmd.run(store),
