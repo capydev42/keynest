@@ -171,7 +171,7 @@ keynest export secrets.json
 | `get <key>` | Retrieve a secret (exits 1 if not found) |
 | `get <key> --clip` | Copy secret to clipboard (auto-clears after 15s) |
 | `update <key> <value>` | Update existing secret |
-| `list [--all]` | List keys (--all shows values & timestamps) |
+| `list [--all]` | List keys (--all shows last-updated timestamps) |
 | `remove <key>` | Remove a secret |
 | `exec -- <cmd>` | Run command with secrets as environment variables |
 | `info` | Show keystore information (KDF params, creation date) |

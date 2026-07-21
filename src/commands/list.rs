@@ -18,7 +18,7 @@ Examples:
   keynest list --all --json                    List all secrets with timestamps as JSON"
 )]
 pub struct ListCommand {
-    /// Print names and secrets
+    /// Show keys with their last-updated timestamps
     #[arg(required = false, short, long, default_value_t = false)]
     pub all: bool,
 
