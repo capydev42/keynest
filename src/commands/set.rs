@@ -38,7 +38,16 @@ impl Command for SetCommand {
         let secret = if self.prompt {
             rpassword::prompt_password("Secret: ")?
         } else if let Some(path) = self.file {
-            std::fs::read_to_string(&path)?
+            let mut content = std::fs::read_to_string(&path)?;
+            // Strip a single trailing newline that editors commonly append,
+            // so the stored secret does not carry a stray "\n" (handles "\n" and "\r\n").
+            if content.ends_with('\n') {
+                content.pop();
+                if content.ends_with('\r') {
+                    content.pop();
+                }
+            }
+            content
         } else {
             self.value.ok_or_else(|| {
                 anyhow::anyhow!("secret value required: provide as argument, --prompt, or --file")
