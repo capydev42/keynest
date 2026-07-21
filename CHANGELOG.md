@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 - Zeroize the derived key on exit for `get` and `exec` by replacing `std::process::exit` with proper exit-code propagation (`Command::run` now returns `ExitCode`), so `Drop for Keynest` always runs
 
+### Documentation
+- Corrected `list --all` help text and README to state it shows last-updated timestamps, not secret values
+
 ---
 
 ## [0.4.3] - 2026-05-28
