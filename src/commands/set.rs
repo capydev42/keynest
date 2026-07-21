@@ -5,7 +5,7 @@ use std::process::ExitCode;
 
 use super::super::auth;
 use crate::commands::Command;
-use crate::commands::common::resolve_storage;
+use crate::commands::common::resolve_existing_storage;
 use keynest::Keynest;
 
 #[derive(Args)]
@@ -36,6 +36,9 @@ impl Command for SetCommand {
             anyhow::bail!("cannot use value argument together with --prompt");
         }
 
+        // Fail fast if the keystore is missing before prompting for the secret/password.
+        let storage = resolve_existing_storage(store)?;
+
         let secret = if self.prompt {
             rpassword::prompt_password("Secret: ")?
         } else if let Some(path) = self.file {
@@ -60,7 +63,6 @@ impl Command for SetCommand {
         }
 
         let password = auth::read_password()?;
-        let storage = resolve_storage(store)?;
         let mut kn = Keynest::open_with_storage(password, storage)?;
         kn.set(&self.key, &secret)?;
         kn.save()?;

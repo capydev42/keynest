@@ -3,7 +3,7 @@ use clap::Args;
 use std::process::ExitCode;
 
 use super::super::auth;
-use crate::commands::common::resolve_storage;
+use crate::commands::common::resolve_existing_storage;
 use keynest::Keynest;
 
 fn to_env_name(key: &str) -> String {
@@ -60,8 +60,8 @@ pub struct ExecCommand {
 
 impl crate::commands::Command for ExecCommand {
     fn run(self, store: Option<std::path::PathBuf>) -> Result<ExitCode> {
+        let storage = resolve_existing_storage(store)?;
         let password = auth::read_password()?;
-        let storage = resolve_storage(store)?;
         let kn = Keynest::open_with_storage(password, storage)?;
 
         let keys: Vec<String> = if let Some(ref only) = self.only {

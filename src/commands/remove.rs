@@ -4,7 +4,7 @@ use std::process::ExitCode;
 
 use super::super::auth;
 use crate::commands::Command;
-use crate::commands::common::resolve_storage;
+use crate::commands::common::resolve_existing_storage;
 use keynest::Keynest;
 
 #[derive(Args)]
@@ -20,8 +20,8 @@ pub struct RemoveCommand {
 
 impl Command for RemoveCommand {
     fn run(self, store: Option<std::path::PathBuf>) -> Result<ExitCode> {
+        let storage = resolve_existing_storage(store)?;
         let password = auth::read_password()?;
-        let storage = resolve_storage(store)?;
         let mut kn = Keynest::open_with_storage(password, storage)?;
         kn.remove(&self.key)?;
         kn.save()?;

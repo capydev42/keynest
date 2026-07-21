@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 - Files created by `export` are now written with `0600` permissions on Unix, so exported plaintext secrets are not world/group readable
 
+### Changed
+- Commands now fail fast before prompting for the master password: `init`/`rekey` validate Argon2 parameters up front, and commands that operate on an existing keystore report a missing store before asking for a password
+
 ---
 
 ## [0.4.4] - 2026-07-21

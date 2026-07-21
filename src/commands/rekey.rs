@@ -4,7 +4,7 @@ use std::process::ExitCode;
 
 use super::super::auth;
 use crate::commands::Command;
-use crate::commands::common::{Argon2Args, resolve_storage};
+use crate::commands::common::{Argon2Args, resolve_existing_storage};
 use keynest::Keynest;
 
 #[derive(Args)]
@@ -19,12 +19,12 @@ pub struct RekeyCommand {
 
 impl Command for RekeyCommand {
     fn run(self, store: Option<std::path::PathBuf>) -> Result<ExitCode> {
+        let kdf = self.argon2.to_kdf_params()?;
+        let storage = resolve_existing_storage(store)?;
         let password = auth::read_password()?;
-        let storage = resolve_storage(store)?;
         let mut kn = Keynest::open_with_storage(password, storage)?;
 
         let new_password = auth::read_new_password_with_confirmation()?;
-        let kdf = self.argon2.to_kdf_params()?;
         kn.rekey(new_password, kdf)?;
 
         println!("store successfully rekeyed");

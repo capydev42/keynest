@@ -7,7 +7,7 @@ use std::process::ExitCode;
 
 use super::super::auth;
 use crate::commands::Command;
-use crate::commands::common::resolve_storage;
+use crate::commands::common::resolve_existing_storage;
 use keynest::Keynest;
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -51,8 +51,8 @@ pub struct ExportCommand {
 
 impl Command for ExportCommand {
     fn run(self, store: Option<PathBuf>) -> Result<ExitCode> {
+        let storage = resolve_existing_storage(store)?;
         let password = auth::read_password()?;
-        let storage = resolve_storage(store)?;
         let kn = Keynest::open_with_storage(password, storage)?;
 
         let keys: Vec<&String> = kn.list();

@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, bail};
 use clap::Args;
 use keynest::{KdfParams, Storage, default_storage};
 use serde::Serialize;
@@ -18,6 +18,21 @@ pub fn resolve_storage(path: Option<PathBuf>) -> Result<Storage> {
         Some(p) => Ok(Storage::new(p)),
         None => default_storage(),
     }
+}
+
+/// Resolves the storage path and fails fast if the keystore does not exist yet.
+///
+/// Commands that operate on an existing keystore should use this so a missing store
+/// is reported before the user is prompted for the master password.
+pub fn resolve_existing_storage(path: Option<PathBuf>) -> Result<Storage> {
+    let storage = resolve_storage(path)?;
+    if !storage.exists() {
+        bail!(
+            "keystore does not exist: {}\nRun `keynest init` first.",
+            storage.path().display()
+        );
+    }
+    Ok(storage)
 }
 
 #[derive(Debug, Args)]
