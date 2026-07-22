@@ -317,6 +317,30 @@ impl Keynest {
         })
     }
 
+    /// Reads keystore metadata from the unencrypted file header, without decrypting.
+    ///
+    /// Unlike [`Keynest::info`], this does not require the master password: it only reads
+    /// the header (format version, algorithm, nonce length, KDF parameters) plus the file
+    /// path/size. Creation date and secret count are encrypted and therefore not included.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read or its header cannot be parsed.
+    pub fn inspect_header(storage: &Storage) -> Result<HeaderInfo> {
+        let data = storage.load()?;
+        let keystore_file = parse(&data)?;
+        let metadata = std::fs::metadata(storage.path())?;
+
+        Ok(HeaderInfo {
+            path: storage.path().to_path_buf(),
+            file_size: metadata.len(),
+            version: keystore_file.version(),
+            algorithm: keystore_file.algorithm().name(),
+            nonce_len: keystore_file.nonce().len(),
+            kdf: *keystore_file.kdf(),
+        })
+    }
+
     /// Changes the password and/or KDF parameters.
     ///
     /// Re-encrypts the keystore with a new key derived from the new password
@@ -465,32 +489,124 @@ fn format_size(bytes: u64) -> String {
     }
 }
 
+/// Writes the Location, Encryption, and Key Derivation sections shared by the
+/// [`StoreInfo`] and [`HeaderInfo`] displays.
+fn write_header_sections(
+    f: &mut std::fmt::Formatter<'_>,
+    path: &std::path::Path,
+    file_size: u64,
+    version: u8,
+    algorithm: &str,
+    nonce_len: usize,
+    kdf: &KdfParams,
+) -> std::fmt::Result {
+    writeln!(f, "Location")?;
+    writeln!(f, "  Path:              {}", path.display())?;
+    writeln!(f, "  Size:              {}", format_size(file_size))?;
+    writeln!(f, "  Format version:    {}", version)?;
+    writeln!(f)?;
+
+    writeln!(f, "Encryption")?;
+    writeln!(f, "  Algorithm:         {}", algorithm)?;
+    writeln!(f, "  Nonce length:      {} bytes", nonce_len)?;
+    writeln!(f)?;
+
+    writeln!(f, "Key Derivation")?;
+    writeln!(f, "  Memory:            {} KiB", kdf.mem_cost_kib())?;
+    writeln!(f, "  Time cost:         {}", kdf.time_cost())?;
+    writeln!(f, "  Parallelism:       {}", kdf.parallelism())
+}
+
 impl std::fmt::Display for StoreInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "Keynest Store Information")?;
         writeln!(f, "────────────────────────────────────────")?;
         writeln!(f)?;
 
-        writeln!(f, "Location")?;
-        writeln!(f, "  Path:              {}", self.path.display())?;
-        writeln!(f, "  Size:              {}", format_size(self.file_size))?;
-        writeln!(f, "  Format version:    {}", self.version)?;
+        write_header_sections(
+            f,
+            &self.path,
+            self.file_size,
+            self.version,
+            self.algorithm,
+            self.nonce_len,
+            &self.kdf,
+        )?;
         writeln!(f)?;
 
         writeln!(f, "Metadata")?;
         writeln!(f, "  Created:           {}", self.creation_date)?;
-        writeln!(f, "  Secrets stored:    {}", self.secrets_count)?;
+        writeln!(f, "  Secrets stored:    {}", self.secrets_count)
+    }
+}
+
+/// Keystore metadata read from the unencrypted file header (no password required).
+///
+/// Returned by [`Keynest::inspect_header`]. Contains everything [`StoreInfo`] does except
+/// the encrypted `creation_date` and `secrets_count`.
+#[derive(Serialize)]
+pub struct HeaderInfo {
+    path: PathBuf,
+    file_size: u64,
+    version: u8,
+    algorithm: &'static str,
+    nonce_len: usize,
+    kdf: KdfParams,
+}
+
+impl HeaderInfo {
+    /// Returns the file path.
+    pub fn path(&self) -> &PathBuf {
+        &self.path
+    }
+
+    /// Returns the file size in bytes.
+    pub fn file_size(&self) -> u64 {
+        self.file_size
+    }
+
+    /// Returns the format version.
+    pub fn version(&self) -> u8 {
+        self.version
+    }
+
+    /// Returns the encryption algorithm.
+    pub fn algorithm(&self) -> &'static str {
+        self.algorithm
+    }
+
+    /// Returns the nonce length in bytes.
+    pub fn nonce_len(&self) -> usize {
+        self.nonce_len
+    }
+
+    /// Returns the KDF parameters used for key derivation.
+    pub fn kdf(&self) -> &KdfParams {
+        &self.kdf
+    }
+}
+
+impl std::fmt::Display for HeaderInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Keynest Store Information (header only)")?;
+        writeln!(f, "────────────────────────────────────────")?;
         writeln!(f)?;
 
-        writeln!(f, "Encryption")?;
-        writeln!(f, "  Algorithm:         {}", self.algorithm)?;
-        writeln!(f, "  Nonce length:      {} bytes", self.nonce_len)?;
+        write_header_sections(
+            f,
+            &self.path,
+            self.file_size,
+            self.version,
+            self.algorithm,
+            self.nonce_len,
+            &self.kdf,
+        )?;
         writeln!(f)?;
 
-        writeln!(f, "Key Derivation")?;
-        writeln!(f, "  Memory:            {} KiB", self.kdf.mem_cost_kib())?;
-        writeln!(f, "  Time cost:         {}", self.kdf.time_cost())?;
-        writeln!(f, "  Parallelism:       {}", self.kdf.parallelism())
+        writeln!(
+            f,
+            "Note: run `keynest info` (with the password) to see creation date and secret count."
+        )
     }
 }
 

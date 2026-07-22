@@ -147,6 +147,7 @@ keynest exec --print
 
 # Show keystore info (KDF params, creation date)
 keynest info
+keynest info --no-decrypt  # header metadata only, no password required
 
 # Change password (and optionally KDF parameters)
 keynest rekey
@@ -175,6 +176,7 @@ keynest export secrets.json
 | `remove <key>` | Remove a secret |
 | `exec -- <cmd>` | Run command with secrets as environment variables |
 | `info` | Show keystore information (KDF params, creation date) |
+| `info --no-decrypt` | Show header metadata only, without the password |
 | `rekey` | Change password and/or KDF parameters |
 | `import <file>` | Import secrets from file (env or json) |
 | `export [file]` | Export secrets to file or stdout |
