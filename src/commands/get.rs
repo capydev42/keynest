@@ -23,7 +23,7 @@ pub struct GetCommand {
     pub key: String,
 
     /// Copy secret to clipboard
-    #[arg(long, short = 'c')]
+    #[arg(long, short = 'c', conflicts_with = "json")]
     pub clip: bool,
 
     /// Seconds before clipboard is cleared (default: 15, min: 1)

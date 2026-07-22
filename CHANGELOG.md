@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Commands now fail fast before prompting for the master password: `init`/`rekey` validate Argon2 parameters up front, and commands that operate on an existing keystore report a missing store before asking for a password
+- `get` now rejects `--clip` together with `--json` with a usage error instead of silently ignoring `--json`
 
 ---
 
