@@ -25,6 +25,24 @@ fn apply_prefix(prefix: Option<&str>, mut key: String) -> String {
     key
 }
 
+/// Warns (non-fatally, to stderr) when two distinct keys map to the same environment
+/// variable name, since only the last one would survive as an env var.
+fn warn_on_env_name_collisions(keys: &[String], prefix: Option<&str>) {
+    use std::collections::HashMap;
+
+    let mut seen: HashMap<String, String> = HashMap::new();
+    for key in keys {
+        let env_key = apply_prefix(prefix, to_env_name(key));
+        if let Some(prev) = seen.insert(env_key.clone(), key.clone()) {
+            if &prev != key {
+                eprintln!(
+                    "Warning: keys '{prev}' and '{key}' both map to environment variable '{env_key}'; '{key}' overrides '{prev}'"
+                );
+            }
+        }
+    }
+}
+
 fn shell_escape(value: &str) -> String {
     if cfg!(windows) {
         format!("\"{}\"", value.replace('"', "\"\""))
@@ -69,6 +87,8 @@ impl crate::commands::Command for ExecCommand {
         } else {
             kn.list().iter().map(|s| s.to_string()).collect()
         };
+
+        warn_on_env_name_collisions(&keys, self.prefix.as_deref());
 
         if self.print {
             for key in &keys {

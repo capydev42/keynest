@@ -5,8 +5,9 @@ use serde::Serialize;
 use std::fmt::Display;
 use std::path::PathBuf;
 
-pub fn print_json<T: Serialize>(value: &T) {
-    println!("{}", serde_json::to_string_pretty(value).unwrap());
+pub fn print_json<T: Serialize>(value: &T) -> Result<()> {
+    println!("{}", serde_json::to_string_pretty(value)?);
+    Ok(())
 }
 
 pub fn print_plain<T: Display>(value: &T) {

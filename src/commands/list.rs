@@ -45,10 +45,10 @@ impl Command for ListCommand {
                         })
                     })
                     .collect();
-                print_json(&entries);
+                print_json(&entries)?;
             } else {
                 let keys: Vec<&str> = kn.list().iter().map(|s| s.as_str()).collect();
-                print_json(&keys);
+                print_json(&keys)?;
             }
         } else if self.all {
             let entries = kn.list_all();

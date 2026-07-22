@@ -1023,6 +1023,43 @@ fn get_missing_key_exits_with_code_1() {
 }
 
 #[test]
+fn exec_warns_on_env_name_collision() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    // Two distinct keys that both normalize to the env var API_KEY.
+    for (k, v) in [("api.key", "v1"), ("api-key", "v2")] {
+        bin()
+            .env("KEYNEST_PASSWORD", "pw")
+            .arg("--store")
+            .arg(&store)
+            .args(["set", k, v])
+            .assert()
+            .success();
+    }
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .args(["exec", "--print"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "both map to environment variable 'API_KEY'",
+        ))
+        .stdout(predicate::str::contains("API_KEY="));
+}
+
+#[test]
 fn export_json_to_stdout() {
     let dir = tempdir().unwrap();
     let store = dir.path().join("test.db");
