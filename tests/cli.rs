@@ -571,6 +571,79 @@ fn get_json_output() {
 }
 
 #[test]
+fn list_output_is_sorted() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    // Insert in deliberately non-sorted order.
+    for key in ["zebra", "apple", "mango"] {
+        bin()
+            .env("KEYNEST_PASSWORD", "pw")
+            .arg("--store")
+            .arg(&store)
+            .args(["set", key, "v"])
+            .assert()
+            .success();
+    }
+
+    // Plain `list` must emit keys sorted, deterministically.
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("list")
+        .assert()
+        .success()
+        .stdout(predicate::eq("apple\nmango\nzebra\n"));
+}
+
+#[test]
+fn export_json_keys_are_sorted() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    for key in ["zebra", "apple", "mango"] {
+        bin()
+            .env("KEYNEST_PASSWORD", "pw")
+            .arg("--store")
+            .arg(&store)
+            .args(["set", key, "v"])
+            .assert()
+            .success();
+    }
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("export")
+        .assert()
+        .success()
+        .stdout(predicate::function(|s: &str| {
+            match (s.find("apple"), s.find("mango"), s.find("zebra")) {
+                (Some(a), Some(m), Some(z)) => a < m && m < z,
+                _ => false,
+            }
+        }));
+}
+
+#[test]
 fn list_json_output() {
     let dir = tempdir().unwrap();
     let store = dir.path().join("test.db");

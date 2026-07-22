@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::{Args, ValueEnum};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -154,7 +154,8 @@ fn escape_env_value(value: &str) -> String {
 }
 
 fn format_as_json(kn: &Keynest, keys: &[&String]) -> Result<String> {
-    let map: HashMap<&str, &str> = keys
+    // BTreeMap keeps the JSON output sorted by key (deterministic across runs).
+    let map: BTreeMap<&str, &str> = keys
         .iter()
         .filter_map(|k| kn.get(k).map(|v| (k.as_str(), v)))
         .collect();

@@ -3,14 +3,15 @@
 use crate::error::StoreError;
 use chrono::Local;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// In-memory secret store.
 ///
-/// Holds all secrets in a HashMap with metadata.
+/// Holds all secrets in a `BTreeMap` keyed by secret name, so keys and entries
+/// are always iterated in sorted order (deterministic `list`/`export`/`exec` output).
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Store {
-    secrets: HashMap<String, SecretEntry>,
+    secrets: BTreeMap<String, SecretEntry>,
     creation_date: String,
 }
 
@@ -56,7 +57,7 @@ impl Store {
     /// Creates a new empty store.
     pub fn new() -> Self {
         Store {
-            secrets: HashMap::new(),
+            secrets: BTreeMap::new(),
             creation_date: Local::now().to_string(),
         }
     }
