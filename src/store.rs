@@ -1,9 +1,17 @@
 //! In-memory secret storage.
 
 use crate::error::StoreError;
-use chrono::Local;
+use chrono::{SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+
+/// Returns the current time as a UTC RFC 3339 timestamp (e.g. `2026-07-22T12:34:56Z`).
+///
+/// Used for `creation_date` and `updated`: UTC + RFC 3339 is locale-independent and
+/// lexically sortable, unlike the previous `Local::now().to_string()`.
+fn now_timestamp() -> String {
+    Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true)
+}
 
 /// In-memory secret store.
 ///
@@ -28,7 +36,7 @@ impl SecretEntry {
         Self {
             key,
             value,
-            updated: Local::now().to_string(),
+            updated: now_timestamp(),
         }
     }
 
@@ -49,7 +57,7 @@ impl SecretEntry {
 
     pub(crate) fn update_value(&mut self, new_value: String) {
         self.value = new_value;
-        self.updated = Local::now().to_string();
+        self.updated = now_timestamp();
     }
 }
 
@@ -58,7 +66,7 @@ impl Store {
     pub fn new() -> Self {
         Store {
             secrets: BTreeMap::new(),
-            creation_date: Local::now().to_string(),
+            creation_date: now_timestamp(),
         }
     }
 
@@ -206,5 +214,16 @@ mod tests {
     fn get_not_existing_key_fails() {
         let store = Store::new();
         assert_eq!(store.get("A"), None);
+    }
+
+    #[test]
+    fn timestamps_are_rfc3339() {
+        let mut store = Store::new();
+        store.set("A", "B").unwrap();
+
+        // Both creation_date and updated must be valid, sortable RFC 3339 timestamps.
+        assert!(chrono::DateTime::parse_from_rfc3339(store.creation_date()).is_ok());
+        let entry = store.entries().next().unwrap();
+        assert!(chrono::DateTime::parse_from_rfc3339(entry.updated()).is_ok());
     }
 }
