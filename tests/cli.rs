@@ -862,6 +862,21 @@ fn exec_propagates_child_exit_code() {
 }
 
 #[test]
+fn get_clip_and_json_conflict() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+
+    // clap rejects the conflicting flags during parsing, before any store/password work.
+    bin()
+        .arg("--store")
+        .arg(&store)
+        .args(["get", "somekey", "--clip", "--json"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("cannot be used with"));
+}
+
+#[test]
 fn get_missing_key_exits_with_code_1() {
     let dir = tempdir().unwrap();
     let store = dir.path().join("test.db");
