@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
+## [0.5.0] - 2026-07-22
 
 ### Added
 - `info --no-decrypt` prints keystore header metadata (format version, algorithm, nonce length, KDF parameters, file path/size) without requiring the master password; the encrypted creation date and secret count are omitted in this mode
