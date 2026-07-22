@@ -743,6 +743,56 @@ fn info_json_output() {
 }
 
 #[test]
+fn info_no_decrypt_without_password() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    // No password provided: header metadata is readable without decrypting.
+    bin()
+        .arg("--store")
+        .arg(&store)
+        .args(["info", "--no-decrypt"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("XChaCha20-Poly1305"))
+        .stdout(predicate::str::contains("65536")) // default KDF memory cost
+        .stdout(predicate::str::contains("Secrets stored").not())
+        .stdout(predicate::str::contains("Created:").not());
+}
+
+#[test]
+fn info_no_decrypt_json() {
+    let dir = tempdir().unwrap();
+    let store = dir.path().join("test.db");
+
+    bin()
+        .env("KEYNEST_PASSWORD", "pw")
+        .arg("--store")
+        .arg(&store)
+        .arg("init")
+        .assert()
+        .success();
+
+    bin()
+        .arg("--store")
+        .arg(&store)
+        .args(["info", "--no-decrypt", "--json"])
+        .assert()
+        .success()
+        .stdout(is_valid_json())
+        .stdout(predicate::str::contains("algorithm"))
+        .stdout(predicate::str::contains("secrets_count").not());
+}
+
+#[test]
 fn get_key_clip_timeout_zero_fails() {
     let dir = tempdir().unwrap();
     let store = dir.path().join("test.db");
