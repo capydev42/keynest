@@ -30,7 +30,7 @@ impl Command for InfoCommand {
         if self.no_decrypt {
             let info = Keynest::inspect_header(&storage)?;
             if self.json {
-                print_json(&info);
+                print_json(&info)?;
             } else {
                 println!("{info}");
             }
@@ -42,7 +42,7 @@ impl Command for InfoCommand {
         let info = kn.info()?;
 
         if self.json {
-            print_json(&info);
+            print_json(&info)?;
         } else {
             println!("{info}");
         }

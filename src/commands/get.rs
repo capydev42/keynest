@@ -50,7 +50,7 @@ impl Command for GetCommand {
                 if self.clip {
                     copy_to_clipboard(secret, self.timeout)?;
                 } else if self.json {
-                    print_json(&serde_json::json!({"key": self.key, "value": secret}));
+                    print_json(&serde_json::json!({"key": self.key, "value": secret}))?;
                 } else {
                     print_plain(&secret);
                 }

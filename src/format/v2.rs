@@ -159,7 +159,33 @@ pub fn parse(data: &[u8]) -> Result<KeystoreFile> {
     Ok(KeystoreFile::new(header, ciphertext))
 }
 
+/// Encodes the authenticated header prefix — magic, version, and the KDF / Algorithm /
+/// Salt TLVs — into `out`.
+///
+/// These bytes are shared byte-for-byte between the on-disk file (via [`serialize`]) and
+/// the AEAD AAD (via [`build_header_aad`]); keeping them in one place guarantees the two
+/// stay in lockstep. Nonce and Ciphertext are appended by the serializer only and are
+/// deliberately excluded from the AAD (the nonce is generated during encryption).
+fn encode_header_prefix(header: &Header, out: &mut Vec<u8>) {
+    out.extend_from_slice(MAGIC);
+    out.push(VERSION_V2);
+
+    let mut kdf_bytes = Vec::with_capacity(12);
+    kdf_bytes.extend_from_slice(&header.kdf().mem_cost_kib().to_le_bytes());
+    kdf_bytes.extend_from_slice(&header.kdf().time_cost().to_le_bytes());
+    kdf_bytes.extend_from_slice(&header.kdf().parallelism().to_le_bytes());
+
+    let algo_id: u8 = header.algorithm().into();
+
+    tlv::encode(TlvType::Kdf.into(), &kdf_bytes, out);
+    tlv::encode(TlvType::Algorithm.into(), &[algo_id], out);
+    tlv::encode(TlvType::Salt.into(), header.salt(), out);
+}
+
 /// Serializes a KeystoreFile to v2 format bytes using TLV encoding.
+///
+/// The layout is exactly `header_prefix ‖ Nonce TLV ‖ Ciphertext TLV`, where the prefix
+/// is the same bytes used as the AEAD AAD (see [`encode_header_prefix`]).
 ///
 /// # Errors
 ///
@@ -171,21 +197,7 @@ pub fn serialize(file: &KeystoreFile) -> Result<Vec<u8>> {
 
     let mut buf = Vec::new();
 
-    // header
-    buf.extend_from_slice(MAGIC);
-    buf.push(VERSION_V2);
-
-    // TLVs
-    let mut kdf_bytes = Vec::with_capacity(12);
-    kdf_bytes.extend_from_slice(&file.kdf().mem_cost_kib().to_le_bytes());
-    kdf_bytes.extend_from_slice(&file.kdf().time_cost().to_le_bytes());
-    kdf_bytes.extend_from_slice(&file.kdf().parallelism().to_le_bytes());
-
-    let algo_id: u8 = file.algorithm().into();
-
-    tlv::encode(TlvType::Kdf.into(), &kdf_bytes, &mut buf);
-    tlv::encode(TlvType::Algorithm.into(), &[algo_id], &mut buf);
-    tlv::encode(TlvType::Salt.into(), file.salt(), &mut buf);
+    encode_header_prefix(&file.header, &mut buf);
     tlv::encode(TlvType::Nonce.into(), file.nonce(), &mut buf);
     tlv::encode(TlvType::Ciphertext.into(), file.ciphertext(), &mut buf);
 
@@ -198,21 +210,7 @@ pub fn serialize(file: &KeystoreFile) -> Result<Vec<u8>> {
 /// The AAD protects KDF params, algorithm, and salt from being modified.
 pub(crate) fn build_header_aad(header: &Header) -> Vec<u8> {
     let mut aad = Vec::new();
-
-    aad.extend_from_slice(MAGIC);
-    aad.push(VERSION_V2);
-
-    let mut kdf_bytes = Vec::with_capacity(12);
-    kdf_bytes.extend_from_slice(&header.kdf().mem_cost_kib().to_le_bytes());
-    kdf_bytes.extend_from_slice(&header.kdf().time_cost().to_le_bytes());
-    kdf_bytes.extend_from_slice(&header.kdf().parallelism().to_le_bytes());
-
-    let algo_id: u8 = header.algorithm().into();
-
-    tlv::encode(TlvType::Kdf.into(), &kdf_bytes, &mut aad);
-    tlv::encode(TlvType::Algorithm.into(), &[algo_id], &mut aad);
-    tlv::encode(TlvType::Salt.into(), header.salt(), &mut aad);
-
+    encode_header_prefix(header, &mut aad);
     aad
 }
 
@@ -244,6 +242,23 @@ mod tests {
         assert_eq!(parsed.kdf().time_cost(), 3);
         assert_eq!(parsed.kdf().parallelism(), 2);
         assert_eq!(parsed.algorithm(), Algorithm::XChaCha20Poly1305);
+    }
+
+    #[test]
+    fn serialized_header_prefix_matches_aad() {
+        let header = Header::new(
+            KdfParams::new(65536, 3, 1).unwrap(),
+            Algorithm::XChaCha20Poly1305,
+            vec![9u8; 16],
+            vec![7u8; 24],
+        );
+        let file = KeystoreFile::new(header, vec![0u8; 32]);
+
+        let bytes = serialize(&file).unwrap();
+        let aad = build_header_aad(&file.header);
+
+        // The on-disk header prefix must be byte-identical to the AEAD AAD.
+        assert!(bytes.starts_with(&aad));
     }
 
     #[test]

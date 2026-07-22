@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Commands now fail fast before prompting for the master password: `init`/`rekey` validate Argon2 parameters up front, and commands that operate on an existing keystore report a missing store before asking for a password
 - `get` now rejects `--clip` together with `--json` with a usage error instead of silently ignoring `--json`
 - `list`, `export`, and `exec --print` now emit secrets sorted by key (deterministic output across runs); the store is backed by a `BTreeMap`
+- `exec` now warns when multiple secret keys map to the same environment variable name (e.g. `api.key` and `api-key` → `API_KEY`) instead of silently overwriting one
 - Timestamps (`creation_date`, `updated`) are now stored as UTC RFC 3339 (e.g. `2026-07-22T12:34:56Z`) instead of a locale/timezone-dependent local time string, making them portable and lexically sortable
 
 ---
